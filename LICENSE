@@ -36,10 +36,24 @@ For technical implementation, see docs/prds/implementation-prd.md
 
 DATA SOURCES ACKNOWLEDGMENT:
 
-This project uses publicly available data from:
-- National Assessment of Educational Progress (NAEP)
-- U.S. Department of Education EdFacts
-- U.S. Census Bureau Education Finance Survey
-- Office for Civil Rights Civil Rights Data Collection
+This project uses publicly available data from multiple federal agencies with required attributions:
 
-Please comply with each data source's terms of use and citation requirements.
+NAEP Data: National Center for Education Statistics, Institute of Education Sciences, 
+U.S. Department of Education, National Assessment of Educational Progress (NAEP)
+
+IDEA Data: U.S. Department of Education, Office of Special Education Programs, 
+Individuals with Disabilities Education Act (IDEA) Section 618 Data Products
+
+Census Data: U.S. Census Bureau, Annual Survey of School System Finances (F-33)
+
+OCR Data: U.S. Department of Education, Office for Civil Rights, 
+Civil Rights Data Collection (CRDC)
+
+ACKNOWLEDGMENT: This research uses data made available by the National Center for 
+Education Statistics (NAEP), the Office of Special Education Programs (IDEA data), 
+the U.S. Census Bureau (education finance data), and the Office for Civil Rights 
+(civil rights data). The conclusions drawn from these data are solely those of the 
+author(s) and do not necessarily represent the views or positions of the U.S. 
+Department of Education, U.S. Census Bureau, or any other federal agency.
+
+All data usage complies with federal terms of service and citation requirements.
