@@ -1,0 +1,11 @@
+state,reform_year,reform_type,court_ordered,federal_monitoring,funding_formula_change,weight_increase,description
+AL,2012,funding_formula,0,0,1,0.25,Increased special education weight in funding formula
+CA,2014,comprehensive,1,0,1,0.40,Court-ordered funding increases and formula reform
+TX,2019,funding_formula,0,1,1,0.30,Federal monitoring led to funding formula changes
+NY,2016,court_ordered,1,0,0,0.00,Court mandate for increased special education funding
+FL,2020,covid_response,0,0,1,0.35,COVID-19 emergency funding with formula adjustments
+OH,2015,funding_formula,0,0,1,0.20,Gradual phase-in of increased special education weights
+MI,2018,comprehensive,0,1,1,0.45,Federal oversight and comprehensive reform package
+GA,2021,funding_formula,0,0,1,0.28,Legislative reform of special education funding
+NC,2017,court_ordered,1,0,1,0.50,Leandro court case mandated funding increases
+WA,2019,funding_formula,0,0,1,0.32,McCleary decision follow-up special education reforms

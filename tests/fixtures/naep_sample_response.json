@@ -1,0 +1,79 @@
+{
+  "result": [
+    {
+      "name": "Alabama",
+      "datavalue": [
+        {
+          "categoryname": "Students with IEP - Yes",
+          "value": "245",
+          "errorFlag": "3.2"
+        },
+        {
+          "categoryname": "Students with IEP - No", 
+          "value": "285",
+          "errorFlag": "2.1"
+        }
+      ]
+    },
+    {
+      "name": "California",
+      "datavalue": [
+        {
+          "categoryname": "Students with IEP - Yes",
+          "value": "252",
+          "errorFlag": "2.8"
+        },
+        {
+          "categoryname": "Students with IEP - No",
+          "value": "292", 
+          "errorFlag": "1.9"
+        }
+      ]
+    },
+    {
+      "name": "Texas",
+      "datavalue": [
+        {
+          "categoryname": "Students with IEP - Yes",
+          "value": "248",
+          "errorFlag": "2.5"
+        },
+        {
+          "categoryname": "Students with IEP - No",
+          "value": "289",
+          "errorFlag": "1.7"
+        }
+      ]
+    },
+    {
+      "name": "New York",
+      "datavalue": [
+        {
+          "categoryname": "Students with IEP - Yes",
+          "value": "253",
+          "errorFlag": "3.1"
+        },
+        {
+          "categoryname": "Students with IEP - No",
+          "value": "294",
+          "errorFlag": "2.0"
+        }
+      ]
+    },
+    {
+      "name": "District of Columbia",
+      "datavalue": [
+        {
+          "categoryname": "Students with IEP - Yes",
+          "value": "238",
+          "errorFlag": "4.1"
+        },
+        {
+          "categoryname": "Students with IEP - No",
+          "value": "276",
+          "errorFlag": "3.2"
+        }
+      ]
+    }
+  ]
+}
