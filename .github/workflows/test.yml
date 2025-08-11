@@ -68,14 +68,14 @@ jobs:
         fail_ci_if_error: false
         
     - name: Archive coverage HTML report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-report-${{ matrix.python-version }}
         path: htmlcov/
         
     - name: Archive test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ matrix.python-version }}
@@ -106,7 +106,7 @@ jobs:
         safety check --json --output safety-report.json || true
         
     - name: Upload security scan results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports

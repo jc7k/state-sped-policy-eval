@@ -194,7 +194,7 @@ class TestParseStateRecord:
         assert result['non_swd_mean'] == 285.0
         assert result['non_swd_se'] == 2.1
         assert result['gap'] == 40.0
-        assert abs(result['gap_se'] - 3.84) < 0.01  # sqrt(3.2^2 + 2.1^2)
+        assert abs(result['gap_se'] - 3.8275) < 0.01  # sqrt(3.2^2 + 2.1^2) = 3.8275
         
     def test_unknown_state_name(self):
         """Test handling of unknown state names"""
