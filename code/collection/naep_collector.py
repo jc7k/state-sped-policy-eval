@@ -57,65 +57,75 @@ class NAEPDataCollector:
         if subjects is None:
             subjects = ["mathematics", "reading"]
 
+        # US state abbreviations for NAEP API
+        state_codes = [
+            'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+            'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+            'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+            'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+            'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+        ]
+
         self.logger.info(
-            f"Starting NAEP collection: {len(years)} years, {len(grades)} grades, {len(subjects)} subjects"
+            f"Starting NAEP collection: {len(years)} years, {len(grades)} grades, {len(subjects)} subjects, {len(state_codes)} states"
         )
 
-        total_requests = len(years) * len(grades) * len(subjects)
+        total_requests = len(years) * len(grades) * len(subjects) * len(state_codes)
         request_count = 0
 
         for year in years:
             for grade in grades:
                 for subject in subjects:
-                    request_count += 1
-                    self.logger.info(
-                        f"Request {request_count}/{total_requests}: {subject} grade {grade} year {year}"
-                    )
-
-                    params = {
-                        "type": "data",
-                        "subject": subject,
-                        "grade": grade,
-                        "year": year,
-                        "jurisdiction": "states",
-                        "variable": "SDRACEM",  # Students with disabilities variable
-                        "stattype": "MN:MN,RP:RP",  # Mean scores and percentiles
-                    }
-
-                    try:
-                        response = requests.get(
-                            self.base_url, params=params, timeout=30
-                        )
-                        response.raise_for_status()
-
-                        data = response.json()
-
-                        # Parse API response structure
-                        if "result" in data and data["result"]:
-                            for state_data in data["result"]:
-                                record = self._parse_state_record(
-                                    state_data, year, grade, subject
-                                )
-                                if record:
-                                    self.results.append(record)
-
-                        self.logger.debug(
-                            f"Successfully collected {subject} grade {grade} year {year}"
+                    for state_code in state_codes:
+                        request_count += 1
+                        self.logger.info(
+                            f"Request {request_count}/{total_requests}: {subject} grade {grade} year {year} state {state_code}"
                         )
 
-                    except requests.exceptions.RequestException as e:
-                        self.logger.error(
-                            f"Request failed for {subject} grade {grade} year {year}: {str(e)}"
-                        )
+                        params = {
+                            "type": "data",
+                            "subject": subject,
+                            "grade": grade,
+                            "year": year,
+                            "jurisdiction": state_code,
+                            "variable": "IEP",  # Correct disability status variable
+                            "stattype": "MN:MN",  # Mean scores only to start
+                        }
 
-                    except Exception as e:
-                        self.logger.error(
-                            f"Unexpected error for {subject} grade {grade} year {year}: {str(e)}"
-                        )
+                        try:
+                            response = requests.get(
+                                self.base_url, params=params, timeout=30
+                            )
+                            response.raise_for_status()
 
-                    # Rate limiting - respect API limits
-                    if request_count < total_requests:
-                        time.sleep(self.rate_limit_delay)
+                            data = response.json()
+
+                            # Parse API response structure
+                            if "result" in data and data["result"]:
+                                for state_data in data["result"]:
+                                    record = self._parse_state_record(
+                                        state_data, year, grade, subject
+                                    )
+                                    if record:
+                                        self.results.append(record)
+
+                            self.logger.debug(
+                                f"Successfully collected {subject} grade {grade} year {year} state {state_code}"
+                            )
+
+                        except requests.exceptions.RequestException as e:
+                            self.logger.error(
+                                f"Request failed for {subject} grade {grade} year {year} state {state_code}: {str(e)}"
+                            )
+
+                        except Exception as e:
+                            self.logger.error(
+                                f"Unexpected error for {subject} grade {grade} year {year} state {state_code}: {str(e)}"
+                            )
+
+                        # Rate limiting - respect API limits
+                        if request_count < total_requests:
+                            time.sleep(self.rate_limit_delay)
 
         df = pd.DataFrame(self.results)
         self.logger.info(f"NAEP collection completed: {len(df)} records collected")
@@ -139,70 +149,43 @@ class NAEPDataCollector:
         """
 
         try:
-            # Extract state identifier
-            state_name = state_data.get("name", "")
-            state_code = self._convert_state_name_to_code(state_name)
-
-            if not state_code:
+            # Extract state information from API response
+            state_name = state_data.get("jurisLabel", "")
+            jurisdiction = state_data.get("jurisdiction", "")
+            
+            # Extract disability status information
+            var_value = state_data.get("varValue", "")
+            var_value_label = state_data.get("varValueLabel", "")
+            score = state_data.get("value")
+            
+            # Check if this is valid data
+            if not state_name or score is None:
                 return None
-
-            # Extract disability status data
-            # NAEP API returns data by different demographic categories
-            swd_data = None
-            non_swd_data = None
-
-            # Look for IEP/disability status in the data structure
-            if "datavalue" in state_data:
-                for item in state_data["datavalue"]:
-                    category = item.get("categoryname", "")
-                    if "IEP" in category or "disability" in category.lower():
-                        if (
-                            "Yes" in category
-                        ):  # Students with IEP - Yes = Students WITH disabilities
-                            swd_data = item
-                        elif (
-                            "No" in category
-                        ):  # Students with IEP - No = Students WITHOUT disabilities
-                            non_swd_data = item
-
-            # Create record with available data
+            
+            # Determine if this is SWD or non-SWD data based on varValue
+            # varValue "1" = "Identified as students with disabilities"
+            # varValue "2" = "Not identified as students with disabilities"
+            is_swd = var_value == "1"
+            
+            # Create standardized record
             record = {
-                "state": state_code,
+                "state": jurisdiction,  # State abbreviation from API
+                "state_name": state_name,
                 "year": year,
                 "grade": grade,
                 "subject": subject,
-                "swd_mean": self._safe_float(
-                    swd_data.get("value") if swd_data else None
-                ),
-                "swd_se": self._safe_float(
-                    swd_data.get("errorFlag") if swd_data else None
-                ),
-                "non_swd_mean": self._safe_float(
-                    non_swd_data.get("value") if non_swd_data else None
-                ),
-                "non_swd_se": self._safe_float(
-                    non_swd_data.get("errorFlag") if non_swd_data else None
-                ),
+                "disability_status": "SWD" if is_swd else "non-SWD",
+                "disability_label": var_value_label,
+                "mean_score": float(score),
+                "var_value": var_value,
+                "error_flag": state_data.get("errorFlag"),
+                "is_displayable": state_data.get("isStatDisplayable", 0) == 1
             }
-
-            # Calculate achievement gap if both values available
-            if record["non_swd_mean"] is not None and record["swd_mean"] is not None:
-                record["gap"] = record["non_swd_mean"] - record["swd_mean"]
-            else:
-                record["gap"] = None
-
-            # Calculate gap standard error if both SEs available
-            if record["non_swd_se"] is not None and record["swd_se"] is not None:
-                record["gap_se"] = (
-                    record["non_swd_se"] ** 2 + record["swd_se"] ** 2
-                ) ** 0.5
-            else:
-                record["gap_se"] = None
-
+            
             return record
 
-        except Exception as e:
-            self.logger.warning(f"Failed to parse state record: {str(e)}")
+        except (ValueError, TypeError, KeyError) as e:
+            self.logger.warning(f"Failed to parse state record: {e}")
             return None
 
     def _safe_float(self, value) -> float | None:

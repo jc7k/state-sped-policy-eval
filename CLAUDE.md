@@ -152,3 +152,4 @@ First study combining COVID-19 disruption with state policy variation to identif
 - Permutation tests for inference with small N
 
 When working on this project, prioritize automation and reproducibility while maintaining econometric rigor. The research design is ambitious but feasible given the state-level focus and systematic approach.
+- Always use ruff as the linter and formatter instead of black, isort, and flake8
