@@ -28,18 +28,10 @@ jobs:
       run: |
         uv sync --dev
         
-    - name: Lint with flake8
+    - name: Lint and format check with ruff
       run: |
-        uv run flake8 code/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        uv run flake8 code/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-        
-    - name: Format check with black
-      run: |
-        uv run black --check --diff code/
-        
-    - name: Import sorting check with isort
-      run: |
-        uv run isort --check-only --diff code/
+        uv run ruff check code/
+        uv run ruff format --check --diff code/
         
     - name: Type check with mypy
       run: |

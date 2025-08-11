@@ -49,11 +49,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    # Code formatting and linting
-    "black>=23.0.0",
-    "isort>=5.12.0",
+    # Code formatting and linting - using ruff instead of flake8/black/isort
+    "ruff>=0.12.8",
     "mypy>=1.0.0",
-    "flake8>=6.0.0",
     
     # Testing framework and coverage
     "pytest>=7.0.0",
@@ -86,3 +84,4 @@ advanced = [
     "transformers>=4.20.0",
     "torch>=2.0.0",
 ]
+
