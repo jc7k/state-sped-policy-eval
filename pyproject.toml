@@ -78,8 +78,16 @@ advanced = [
 
 [dependency-groups]
 dev = [
+    "factory-boy>=3.3.3",
+    "hypothesis>=6.137.3",
+    "mypy>=1.17.1",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
+    "pytest-httpx>=0.35.0",
+    "pytest-mock>=3.14.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.12.8",
 ]
+
 
 

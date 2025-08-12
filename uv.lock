@@ -2916,8 +2916,15 @@ docs = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "factory-boy" },
+    { name = "hypothesis" },
+    { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-httpx" },
+    { name = "pytest-mock" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -2960,8 +2967,15 @@ provides-extras = ["dev", "docs", "advanced"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "factory-boy", specifier = ">=3.3.3" },
+    { name = "hypothesis", specifier = ">=6.137.3" },
+    { name = "mypy", specifier = ">=1.17.1" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-httpx", specifier = ">=0.35.0" },
+    { name = "pytest-mock", specifier = ">=3.14.1" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.12.8" },
 ]
 
 [[package]]
