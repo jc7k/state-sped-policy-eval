@@ -459,6 +459,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use this software in academic research, please cite:
 > "Special Education State Policy Analysis: A Quasi-Experimental Analysis of State-Level Policies and Student Outcomes Using COVID-19 as a Natural Experiment"
 
+## Contact and Collaboration
+
+**Principal Investigator**: Jeff Chen, jeffreyc1@alumni.cmu.edu  
+**Collaboration**: This analysis pipeline and documentation were created in collaboration with Claude Code  
+**Repository**: https://github.com/jc7k/state-sped-policy-eval
+
 ## Archived OCR Data
 
 **OCR Civil Rights Data (School-Level)** - Not included in repository due to size:
