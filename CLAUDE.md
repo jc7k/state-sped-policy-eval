@@ -186,3 +186,35 @@ First study combining COVID-19 disruption with state policy variation to identif
 
 When working on this project, prioritize automation and reproducibility while maintaining econometric rigor. The research design is ambitious but feasible given the state-level focus and systematic approach.
 - Always use ruff as the linter and formatter instead of black, isort, and flake8
+
+## Current Project Status (2025-08-12)
+
+### Data Collection Progress
+1. **NAEP Achievement Data** ✅ COMPLETE
+   - Successfully collected 1,200 records (100% coverage)
+   - Years: 2017, 2019, 2022
+   - Validated data quality with comprehensive checks
+   - Achievement gaps properly calculated (~39 point gap)
+   - Data file: `data/raw/naep_state_swd_data.csv`
+
+2. **Census F-33 Finance Data** ✅ COMPLETE
+   - Downloaded and parsed Excel files for 2019-2021
+   - Successfully extracted 153 state-year records
+   - All financial metrics captured: revenue, expenditure by source
+   - 100% data coverage for all 51 states (50 + DC)
+   - Data file: `data/raw/census_education_finance_parsed.csv`
+
+3. **EdFacts Special Education Data** 🔜 NEXT
+   - Will collect enrollment, placement, and outcomes data
+   - API endpoint: https://www2.ed.gov/data/
+
+4. **OCR Civil Rights Data** 🔜 PENDING
+   - Will collect discipline and access data
+   - Direct CSV downloads from ocrdata.ed.gov
+
+### Infrastructure Updates
+- ✅ Migrated from flake8/black/isort to ruff for better performance
+- ✅ Fixed GitHub Actions CI/CD pipeline (updated to actions/upload-artifact@v4)
+- ✅ All 72 unit tests passing
+- ✅ Proper rate limiting implemented across all collectors
+- ✅ Excel parsing capability added (xlrd dependency)
