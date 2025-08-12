@@ -672,7 +672,7 @@ The stakes for special education policy could not be higher—with over 7 millio
 
 **Data and Code Availability**: Complete replication materials, including data, code, and documentation, are available at https://github.com/jc7k/state-sped-policy-eval
 
-**Corresponding Author**: Jeff Chen, jeffreyc1@alumni.cmu.edu  
+**Corresponding Author**: Jeff Chen, https://www.linkedin.com/in/jeffchen/
 **Collaboration**: This report and analysis code were created in collaboration with Claude Code
 
 **Suggested Citation**: "Special Education State Policy Analysis: A Quasi-Experimental Analysis of State-Level Policies and Student Outcomes Using COVID-19 as a Natural Experiment." 2025.
