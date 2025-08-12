@@ -218,3 +218,5 @@ When working on this project, prioritize automation and reproducibility while ma
 - ✅ All 72 unit tests passing
 - ✅ Proper rate limiting implemented across all collectors
 - ✅ Excel parsing capability added (xlrd dependency)
+- Anywhere contact info or author info is needed, use "Jeff Chen, jeffreyc1@alumni.cmu.edu"
+- Where credit is given, mention the reports and code were created in collaboration with Claude Code.
