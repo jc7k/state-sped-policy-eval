@@ -1,0 +1,2 @@
+outcome,ddd_coefficient,ddd_std_error,ddd_pvalue,ddd_tstat,ddd_ci_lower,ddd_ci_upper,covid_main_effect,reform_main_effect,r_squared,n_obs,n_states,significant_5pct
+reading_grade8_gap,0.7535656599668681,1.3634284436483146,0.5804694766487561,0.5526990899136943,-1.9187540895838284,3.425885409517565,-1.364359971848359,1.2160010912855856,0.8213739302922041,150.0,50,False
