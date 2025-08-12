@@ -279,3 +279,34 @@ downloads/
 
 # Pre-commit
 .pre-commit-config.yaml.bak
+
+# Documentation development artifacts
+README_old.md
+DATA_COLLECTION_STATUS.md
+*_old.md
+
+# Development status files
+*STATUS.md
+*_STATUS.md
+
+# Temporary directories
+tmp/
+temp/
+temporary/
+
+# Backup directories
+backups/
+backup/
+old/
+
+# Test data directories (keep proper fixtures in tests/)
+test_data/
+
+# Development screenshots (keep generated figures)
+*.png
+*.jpg
+*.jpeg
+!output/figures/*.png
+!output/figures/*.pdf
+!tests/fixtures/*.png
+!docs/**/*.png

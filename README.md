@@ -459,6 +459,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use this software in academic research, please cite:
 > "Special Education State Policy Analysis: A Quasi-Experimental Analysis of State-Level Policies and Student Outcomes Using COVID-19 as a Natural Experiment"
 
+## Archived OCR Data
+
+**OCR Civil Rights Data (School-Level)** - Not included in repository due to size:
+- `ocr_extracted_2017_archive.zip` (112MB) - Complete 2017-18 CRDC school-level data (locally archived)
+- `ocr_extracted_2020_archive.zip` (77MB) - Complete 2020-21 CRDC school-level data (locally archived)
+
+These archives contain detailed school-level civil rights data including enrollment, discipline, restraint/seclusion, and educational program access by race, gender, and disability status. The data is archived locally but not tracked in git because:
+
+1. **Analysis Focus**: Our research uses state-level aggregated data only; school-level granularity exceeds analytical requirements
+2. **Size Constraints**: Files exceed GitHub's 100MB limit; 1.7GB of extracted files compressed to 189MB archives
+3. **Data Availability**: State-level summaries are available in processed CSV files and meet all research objectives
+4. **Reproducibility**: Complete school-level data can be re-downloaded from OCR if needed for extensions
+
+State-level OCR summaries remain actively used and are available in `data/raw/CRDC-*-State-*.csv` files.
+
 ## Data Sources and Attribution
 
 This project uses publicly available data from multiple federal agencies. Proper attribution is provided below as required by each data source:
