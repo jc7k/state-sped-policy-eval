@@ -30,9 +30,12 @@ python code/analysis/simple_robustness.py
 # 8. Run instrumental variables analysis
 python code/analysis/simple_iv_analysis.py
 
-# 9. View results
-ls output/tables/   # 22 econometric, robustness, and IV result files
-ls output/figures/  # 34 publication-ready visualizations
+# 9. Run COVID triple-difference analysis
+python code/analysis/covid_analysis.py
+
+# 10. View results
+ls output/tables/   # 30 econometric, robustness, IV, and COVID result files
+ls output/figures/  # 35 publication-ready visualizations
 ```
 
 ### Alternative: Data Collection Setup (if needed)
@@ -125,7 +128,8 @@ state-sped-policy-eval/
 │   │   ├── robustness_testing.py  # Comprehensive robustness test suite
 │   │   ├── simple_robustness.py   # Simplified robustness validation
 │   │   ├── instrumental_variables.py  # Full IV analysis framework
-│   │   └── simple_iv_analysis.py  # Manual 2SLS implementation
+│   │   ├── simple_iv_analysis.py  # Manual 2SLS implementation
+│   │   └── covid_analysis.py      # Triple-difference COVID analysis
 │   ├── visualization/      # Publication graphics ✅
 │   │   ├── event_study_plots.py   # Event studies and parallel trends
 │   │   └── treatment_dashboard.py # Geographic dashboards and maps
@@ -138,8 +142,8 @@ state-sped-policy-eval/
 │   ├── final/             # Analysis-ready panel (765 obs, 53 vars) ✅
 │   └── reports/           # Validation and quality reports ✅
 ├── output/
-│   ├── tables/            # 22 econometric, robustness, and IV result files ✅
-│   ├── figures/           # 34 visualization outputs ✅
+│   ├── tables/            # 30 econometric, robustness, IV, and COVID result files ✅
+│   ├── figures/           # 35 visualization outputs ✅
 │   └── reports/           # Policy briefs (pending)
 ├── tests/                 # 72 unit tests, CI/CD framework ✅
 └── pyproject.toml         # Project configuration ✅
@@ -276,11 +280,12 @@ uv run pytest tests/unit/collection/test_naep_collector.py -v -s
 - ✅ **Geographic Dashboard** - State-level maps, regional comparisons, policy timelines (12 plots)
 - ✅ **Robustness Testing Suite** - Treatment balance, effect consistency, validation analysis (1 plot)
 - ✅ **Instrumental Variables Framework** - 2SLS estimation with court orders and federal monitoring (2 plots)
+- ✅ **COVID Triple-Difference Analysis** - Natural experiment framework examining pandemic resilience (1 plot)
 
 **Current Results**:
 - **11 Treatment Cohorts** identified across policy reform timeline
 - **Mixed Achievement Effects**: Math improvements (0.05-0.56 points), reading mixed (-1.15 to +0.77)
-- **Publication-ready Output**: 22 results tables + 34 visualization files
+- **Publication-ready Output**: 30 results tables + 35 visualization files
 - **Geographic Patterns**: West (38%) and Midwest (33%) lead in reform adoption
 - **Policy Timeline**: Peak reform activity in 2019, sustained 2017-2020
 
@@ -288,8 +293,9 @@ uv run pytest tests/unit/collection/test_naep_collector.py -v -s
 - **Model Validation**: Balanced panel structure confirmed, effect consistency verified
 - **Instrumental Variables Results**: Strong instruments (F=12.1), larger IV effects suggest endogeneity bias
 - **Endogeneity Assessment**: IV estimates differ from OLS/DiD, validating instrument approach
+- **COVID Triple-Difference Analysis**: Mixed resilience effects across outcomes, no statistically significant interactions
 
-**Next Phase**: COVID Analysis & Publication Materials (Month 3)
+**Next Phase**: Publication Materials Generation (Month 3)
 
 **Dependencies**: Python 3.12+, statsmodels, linearmodels, pandas, numpy, matplotlib
 
@@ -344,6 +350,33 @@ Our IV analysis addresses potential endogeneity in policy adoption using court o
 - States may self-select into reforms based on unobserved factors correlated with outcomes
 - Court orders and federal monitoring provide credible exogenous variation for identification
 - Results validate importance of addressing endogeneity concerns in policy evaluation
+
+### COVID Triple-Difference Findings
+
+Our COVID analysis leverages the pandemic as a natural experiment to identify which policy reforms provided resilience during crisis:
+
+**Research Design**:
+- **Triple-Difference Framework**: Policy reform × COVID period × achievement gap interactions
+- **Identification**: Comparing resilience of reformed vs non-reformed states during COVID disruption
+- **COVID Period**: 2020-2022 (three-year window)
+- **Sample**: 150 observations (50 states × 3 years) from full 765-observation panel
+
+**COVID Resilience Effects**:
+- **Math Grade 4**: Small positive resilience (+0.32 points, p = 0.84) - not significant
+- **Math Grade 8**: Modest negative resilience (-1.27 points, p = 0.66) - not significant  
+- **Reading Grade 4**: Small negative resilience (-0.31 points, p = 0.89) - not significant
+- **Reading Grade 8**: Small positive resilience (+0.75 points, p = 0.58) - not significant
+
+**Reform Timing Analysis**:
+- **Late Reformers (≥2021)**: Generally showed stronger resilience patterns than mid-reformers
+- **Mid Reformers (2018-2020)**: Smaller sample size (7 states vs 37 late reformers)
+- **Baseline COVID Effects**: All negative, ranging from -0.45 to -1.48 points across outcomes
+
+**Key Insights**:
+- No statistically significant COVID interaction effects detected
+- Mixed patterns suggest policy reforms provided modest but inconsistent protection
+- Limited sample size during COVID period may constrain statistical power
+- Results highlight difficulty of detecting policy effects during unprecedented disruption
 
 ### Data Quality Validation
 
