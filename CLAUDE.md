@@ -24,16 +24,49 @@ mkdir -p data/{raw,processed,final} code/{collection,cleaning,analysis,visualiza
 
 ### Testing and Quality
 ```bash
-# Run any tests (if implemented)
-python -m pytest
+# Run tests with coverage
+PYTHONPATH=/home/user/projects/state-sped-policy-eval uv run pytest tests/unit/ -v --cov=code --cov-report=term-missing
 
-# Format code (if needed)
-python -m black .
-python -m isort .
+# Format and lint code with ruff (NOT black/isort/flake8)
+uv run ruff check code/
+uv run ruff format code/
 
 # Type checking (if implemented)
 python -m mypy main.py
 ```
+
+## Current Project Status (2025-08-11)
+
+### ✅ Completed Data Collection
+1. **NAEP Achievement Data** - FULLY COLLECTED
+   - 1,200 records successfully collected (100% coverage)
+   - 50 states × 3 years (2017, 2019, 2022) × 2 grades (4, 8) × 2 subjects (math, reading)
+   - Achievement gap verified: 39.2 points average (SWD: 215.9 vs non-SWD: 255.1)
+   - Data validated and saved to: `data/raw/naep_state_swd_data.csv`
+
+2. **Census F-33 Education Finance Data** - DOWNLOADED
+   - Successfully downloaded Excel files for 2019, 2020, 2021
+   - Files saved to: `data/raw/census_f33_{year}.xls`
+   - Contains state-level education expenditures and per-pupil spending
+   - Note: Census API does not provide F-33 data; used direct download method
+
+### 🔧 Technical Fixes Implemented
+- Fixed NAEP API integration (changed variable from `SDRACEM` to `IEP`)
+- Implemented proper rate limiting (2s for NAEP, 1s for other APIs)
+- Created comprehensive validation framework for data quality checks
+- Resolved Census API authentication and discovered F-33 not available via API
+
+### 📋 Next Steps When Resuming
+1. **Parse Census Excel Files** - Extract and structure F-33 finance data
+2. **EdFacts Data Collection** - Special education enrollment and outcomes
+3. **OCR Data Collection** - Civil rights compliance data
+4. **Data Integration** - Merge all datasets for econometric analysis
+
+### 🛠️ Key Files Created
+- `code/collection/naep_collector.py` - Fixed and working NAEP data collector
+- `code/collection/census_file_downloader.py` - Alternative Census data downloader
+- `code/validation/naep_data_validator.py` - Comprehensive data validation
+- `DATA_COLLECTION_STATUS.md` - Detailed progress documentation
 
 ## Project Architecture
 

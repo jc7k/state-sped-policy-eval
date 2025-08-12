@@ -1,0 +1,29 @@
+================================================================================
+NAEP DATA VALIDATION REPORT
+================================================================================
+
+📁 FILE INFORMATION
+File: data/raw/naep_state_swd_data.csv
+Size: 0.13 MB
+Records: 1,200
+Columns: 11
+
+📊 VALIDATION STATUS: ✅ VALID
+
+📈 DATA COMPLETENESS
+Coverage: 100.0% (1,200/1,200 records)
+  States: 50/50
+  Years: 3/3
+  Grades: 2/2
+  Subjects: 2/2
+  Disability_Statuses: 2/2
+
+🎯 ACHIEVEMENT GAP ANALYSIS
+Overall Gap: 39.2 points
+SWD Mean Score: 215.9
+Non-SWD Mean Score: 255.1
+
+📊 SCORE STATISTICS
+Mean: 235.5
+Range: 157.1 - 304.3
+Standard Deviation: 30.9
