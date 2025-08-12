@@ -5,17 +5,19 @@ Alternative data collection method when API access is unavailable
 """
 
 import logging
-import time
 from pathlib import Path
+import time
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
 
+from .base_collector import FileBasedCollector
+
 load_dotenv()
 
 
-class CensusFileDownloader:
+class CensusFileDownloader(FileBasedCollector):
     """
     Downloads Census education finance data from direct file URLs
     Used as fallback when API key is unavailable or invalid
@@ -28,8 +30,7 @@ class CensusFileDownloader:
         Args:
             rate_limit_delay: Seconds between download requests
         """
-        self.rate_limit_delay = rate_limit_delay
-        self.logger = logging.getLogger(__name__)
+        super().__init__(rate_limit_delay=rate_limit_delay)
 
         # Known Census education finance data URLs (update as needed)
         self.data_urls = {
@@ -262,6 +263,23 @@ class CensusFileDownloader:
                 time.sleep(self.rate_limit_delay)
 
         return results
+    
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """
+        Fetch Census data (required by abstract base class)
+        
+        Args:
+            **kwargs: Additional arguments (years, output_dir)
+            
+        Returns:
+            Combined DataFrame with all collected data
+        """
+        years = kwargs.get('years', [2019, 2020, 2021])
+        output_dir = kwargs.get('output_dir', Path('.'))
+        
+        results = self.download_education_finance_data(years, output_dir)
+        # Return empty DataFrame for now - parsing would be implemented separately
+        return pd.DataFrame()
 
 
 if __name__ == "__main__":

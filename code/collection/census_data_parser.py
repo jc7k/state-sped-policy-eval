@@ -9,67 +9,15 @@ from pathlib import Path
 
 import pandas as pd
 
+from .common import StateUtils
+
 
 class CensusDataParser:
     """Parse Census F-33 education finance Excel files"""
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-
-        # State abbreviations mapping
-        self.state_abbrev = {
-            "Alabama": "AL",
-            "Alaska": "AK",
-            "Arizona": "AZ",
-            "Arkansas": "AR",
-            "California": "CA",
-            "Colorado": "CO",
-            "Connecticut": "CT",
-            "Delaware": "DE",
-            "District of Columbia": "DC",
-            "Florida": "FL",
-            "Georgia": "GA",
-            "Hawaii": "HI",
-            "Idaho": "ID",
-            "Illinois": "IL",
-            "Indiana": "IN",
-            "Iowa": "IA",
-            "Kansas": "KS",
-            "Kentucky": "KY",
-            "Louisiana": "LA",
-            "Maine": "ME",
-            "Maryland": "MD",
-            "Massachusetts": "MA",
-            "Michigan": "MI",
-            "Minnesota": "MN",
-            "Mississippi": "MS",
-            "Missouri": "MO",
-            "Montana": "MT",
-            "Nebraska": "NE",
-            "Nevada": "NV",
-            "New Hampshire": "NH",
-            "New Jersey": "NJ",
-            "New Mexico": "NM",
-            "New York": "NY",
-            "North Carolina": "NC",
-            "North Dakota": "ND",
-            "Ohio": "OH",
-            "Oklahoma": "OK",
-            "Oregon": "OR",
-            "Pennsylvania": "PA",
-            "Rhode Island": "RI",
-            "South Carolina": "SC",
-            "South Dakota": "SD",
-            "Tennessee": "TN",
-            "Texas": "TX",
-            "Utah": "UT",
-            "Vermont": "VT",
-            "Virginia": "VA",
-            "Washington": "WA",
-            "West Virginia": "WV",
-            "Wisconsin": "WI",
-            "Wyoming": "WY",
-        }
+        self.state_utils = StateUtils()
 
         # Key financial variables to extract
         self.key_variables = [
@@ -221,7 +169,7 @@ class CensusDataParser:
                 continue
 
             # Get state abbreviation
-            state_abbrev = self._get_state_abbrev(state_name)
+            state_abbrev = self.state_utils.name_to_abbrev(state_name)
             if not state_abbrev:
                 continue
 
@@ -287,24 +235,6 @@ class CensusDataParser:
 
         return df_clean
 
-    def _get_state_abbrev(self, state_name: str) -> str | None:
-        """Get state abbreviation from state name"""
-        state_name = state_name.strip()
-
-        # Direct lookup
-        if state_name in self.state_abbrev:
-            return self.state_abbrev[state_name]
-
-        # Try case-insensitive lookup
-        for full_name, abbrev in self.state_abbrev.items():
-            if full_name.lower() == state_name.lower():
-                return abbrev
-
-        # Check if it's already an abbreviation
-        if len(state_name) == 2 and state_name.upper() in self.state_abbrev.values():
-            return state_name.upper()
-
-        return None
 
     def _parse_numeric(self, value) -> float | None:
         """Parse numeric value from various formats"""
@@ -415,7 +345,7 @@ class CensusDataParser:
         }
 
         # Check for missing states by year
-        expected_states = set(self.state_abbrev.values())
+        expected_states = set(self.state_utils.get_all_states())
         for year in df["year"].unique():
             year_data = df[df["year"] == year]
             found_states = set(year_data["state"].unique())

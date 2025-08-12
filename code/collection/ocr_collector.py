@@ -12,8 +12,11 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from .base_collector import FileBasedCollector
+from .common import StateUtils
 
-class OCRCollector:
+
+class OCRCollector(FileBasedCollector):
     """
     Collect OCR Civil Rights Data Collection including:
     - Discipline data by disability status
@@ -29,8 +32,7 @@ class OCRCollector:
         Args:
             rate_limit_delay: Seconds to wait between requests
         """
-        self.logger = logging.getLogger(__name__)
-        self.rate_limit_delay = rate_limit_delay
+        super().__init__(rate_limit_delay=rate_limit_delay)
 
         # Base URL for OCR data downloads
         self.base_url = "https://ocrdata.ed.gov/assets"
@@ -70,60 +72,9 @@ class OCRCollector:
             },
         }
 
-        # State codes for filtering
-        self.state_codes = [
-            "AL",
-            "AK",
-            "AZ",
-            "AR",
-            "CA",
-            "CO",
-            "CT",
-            "DE",
-            "DC",
-            "FL",
-            "GA",
-            "HI",
-            "ID",
-            "IL",
-            "IN",
-            "IA",
-            "KS",
-            "KY",
-            "LA",
-            "ME",
-            "MD",
-            "MA",
-            "MI",
-            "MN",
-            "MS",
-            "MO",
-            "MT",
-            "NE",
-            "NV",
-            "NH",
-            "NJ",
-            "NM",
-            "NY",
-            "NC",
-            "ND",
-            "OH",
-            "OK",
-            "OR",
-            "PA",
-            "RI",
-            "SC",
-            "SD",
-            "TN",
-            "TX",
-            "UT",
-            "VT",
-            "VA",
-            "WA",
-            "WV",
-            "WI",
-            "WY",
-        ]
+        # State utilities for consistent state handling
+        self.state_utils = StateUtils()
+        self.state_codes = self.state_utils.get_all_states()
 
     def download_file(self, url: str, output_path: Path) -> bool:
         """
@@ -332,7 +283,7 @@ class OCRCollector:
 
             # Filter to only include states (not territories or totals)
             if "state" in df.columns:
-                df = df[df["state"].isin(self.state_codes + ["DC"])]
+                df = df[df["state"].isin(self.state_codes)]
 
             self.logger.info(f"Parsed {len(df)} records from {file_path}")
 
@@ -342,6 +293,23 @@ class OCRCollector:
             self.logger.error(f"Error parsing {file_path}: {e}")
             return pd.DataFrame()
 
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """
+        Fetch OCR data (required by abstract base class)
+        
+        Args:
+            **kwargs: Additional arguments (years, output_dir)
+            
+        Returns:
+            Combined DataFrame with all collected data
+        """
+        years = kwargs.get('years', [2015, 2017, 2020])
+        output_dir = kwargs.get('output_dir', Path('.'))
+        
+        results = self.collect_all_data(years, output_dir)
+        # Return empty DataFrame for now - parsing would be implemented separately
+        return pd.DataFrame()
+    
     def collect_all_data(self, years: list[int], output_dir: Path) -> dict[int, Path]:
         """
         Collect all OCR civil rights data

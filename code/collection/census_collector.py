@@ -13,11 +13,14 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
+from .base_collector import APIBasedCollector
+from .common import StateUtils, SafeTypeConverter
+
 # Load environment variables
 load_dotenv()
 
 
-class CensusEducationFinance:
+class CensusEducationFinance(APIBasedCollector):
     """
     Census Bureau education finance data collector
     Includes special education expenditures starting 2015
@@ -43,65 +46,33 @@ class CensusEducationFinance:
                 "Get your free API key at: https://api.census.gov/data/key_signup.html"
             )
 
-        self.base_url = "https://api.census.gov/data"
-        self.rate_limit_delay = rate_limit_delay
-        self.results = []
-        self.logger = logging.getLogger(__name__)
+        # Initialize parent class
+        base_url = "https://api.census.gov/data"
+        super().__init__(
+            base_url=base_url,
+            api_key=self.api_key,
+            rate_limit_delay=rate_limit_delay
+        )
+        
+        # Initialize utilities
+        self.state_utils = StateUtils()
+        self.converter = SafeTypeConverter()
 
-        # State FIPS codes for education finance data
-        self.state_fips = {
-            "01": "AL",
-            "02": "AK",
-            "04": "AZ",
-            "05": "AR",
-            "06": "CA",
-            "08": "CO",
-            "09": "CT",
-            "10": "DE",
-            "11": "DC",
-            "12": "FL",
-            "13": "GA",
-            "15": "HI",
-            "16": "ID",
-            "17": "IL",
-            "18": "IN",
-            "19": "IA",
-            "20": "KS",
-            "21": "KY",
-            "22": "LA",
-            "23": "ME",
-            "24": "MD",
-            "25": "MA",
-            "26": "MI",
-            "27": "MN",
-            "28": "MS",
-            "29": "MO",
-            "30": "MT",
-            "31": "NE",
-            "32": "NV",
-            "33": "NH",
-            "34": "NJ",
-            "35": "NM",
-            "36": "NY",
-            "37": "NC",
-            "38": "ND",
-            "39": "OH",
-            "40": "OK",
-            "41": "OR",
-            "42": "PA",
-            "44": "RI",
-            "45": "SC",
-            "46": "SD",
-            "47": "TN",
-            "48": "TX",
-            "49": "UT",
-            "50": "VT",
-            "51": "VA",
-            "53": "WA",
-            "54": "WV",
-            "55": "WI",
-            "56": "WY",
-        }
+        # Use StateUtils for FIPS mapping
+        self.state_fips = self.state_utils.FIPS_TO_ABBREV
+
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """
+        Fetch Census data (required by abstract base class)
+        
+        Args:
+            **kwargs: Additional arguments (years)
+            
+        Returns:
+            DataFrame with collected Census finance data
+        """
+        years = kwargs.get('years', [2020, 2021, 2022])
+        return self.fetch_state_finance(years)
 
     def fetch_state_finance(self, years: list[int]) -> pd.DataFrame:
         """
@@ -208,11 +179,11 @@ class CensusEducationFinance:
             record = {
                 "state": state_code,
                 "year": year,
-                "total_expenditures": self._safe_int(row_data.get("TOTALEXP")),
-                "current_instruction": self._safe_int(row_data.get("TCURINST")),
-                "student_support_services": self._safe_int(row_data.get("TCURSSVC")),
-                "other_current_expenditures": self._safe_int(row_data.get("TCUROTH")),
-                "enrollment": self._safe_int(row_data.get("ENROLL")),
+                "total_expenditures": SafeTypeConverter.safe_int(row_data.get("TOTALEXP")),
+                "current_instruction": SafeTypeConverter.safe_int(row_data.get("TCURINST")),
+                "student_support_services": SafeTypeConverter.safe_int(row_data.get("TCURSSVC")),
+                "other_current_expenditures": SafeTypeConverter.safe_int(row_data.get("TCUROTH")),
+                "enrollment": SafeTypeConverter.safe_int(row_data.get("ENROLL")),
             }
 
             # Calculate per-pupil spending

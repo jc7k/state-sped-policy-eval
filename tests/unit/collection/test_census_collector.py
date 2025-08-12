@@ -69,8 +69,8 @@ class TestCensusEducationFinanceInit:
 class TestFetchStateFinance:
     """Test main data collection method"""
     
-    @patch('code.collection.census_collector.requests.get')
-    @patch('code.collection.census_collector.time.sleep')
+    @patch('requests.get')
+    @patch('time.sleep')
     def test_successful_single_year(self, mock_sleep, mock_get, census_sample_response):
         """Test successful data collection for single year"""
         # Setup mock response
@@ -99,8 +99,8 @@ class TestFetchStateFinance:
         # Verify result structure
         assert isinstance(result, pd.DataFrame)
         
-    @patch('code.collection.census_collector.requests.get')
-    @patch('code.collection.census_collector.time.sleep')
+    @patch('requests.get')
+    @patch('time.sleep')
     def test_multiple_years(self, mock_sleep, mock_get, census_sample_response):
         """Test data collection across multiple years"""
         mock_response = Mock()
@@ -119,7 +119,7 @@ class TestFetchStateFinance:
         # Should sleep 2 times (between requests, not after last)
         assert mock_sleep.call_count == 2
         
-    @patch('code.collection.census_collector.requests.get')
+    @patch('requests.get')
     def test_request_exception_handling(self, mock_get):
         """Test handling of network request exceptions"""
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
@@ -131,7 +131,7 @@ class TestFetchStateFinance:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
         
-    @patch('code.collection.census_collector.requests.get')
+    @patch('requests.get')
     def test_different_endpoint_for_older_years(self, mock_get):
         """Test that older years use different API endpoint"""
         mock_response = Mock()
@@ -221,9 +221,10 @@ class TestSafeInt:
         """Test conversion of valid integer values"""
         collector = CensusEducationFinance(api_key="test_key")
         
-        assert collector._safe_int('12345') == 12345
-        assert collector._safe_int('0') == 0
-        assert collector._safe_int(67890) == 67890
+        # Now using SafeTypeConverter through collector.converter
+        assert collector.converter.safe_int('12345') == 12345
+        assert collector.converter.safe_int('0') == 0
+        assert collector.converter.safe_int(67890) == 67890
         
     def test_invalid_values(self):
         """Test handling of invalid values"""
@@ -232,7 +233,7 @@ class TestSafeInt:
         invalid_values = [None, '', 'null', 'N', 'X', 'S', 'D', 'invalid']
         
         for value in invalid_values:
-            assert collector._safe_int(value) is None
+            assert collector.converter.safe_int(value) is None
 
 
 class TestStateNameConversion:

@@ -3,22 +3,46 @@ Data Collection Module
 Automated collection from NAEP, EdFacts, Census, and OCR sources
 """
 
-# Only import existing modules
-from .census_collector import CensusEducationFinance
-from .naep_collector import NAEPDataCollector
+# Import common utilities
+from .common import (
+    APIClient,
+    DataValidator, 
+    FileUtils,
+    SafeTypeConverter,
+    StateUtils
+)
 
-# TODO: Import these when implemented
-# from .edfacts_collector import EdFactsCollector
-# from .ocr_collector import OCRDataCollector
-# from .policy_builder import PolicyDatabaseBuilder
-# from .master_pipeline import run_full_data_collection
+# Import base classes
+from .base_collector import (
+    APIBasedCollector,
+    BaseDataCollector,
+    FileBasedCollector
+)
+
+# Import specific collectors
+from .census_collector import CensusEducationFinance
+from .census_data_parser import CensusDataParser
+from .census_file_downloader import CensusFileDownloader
+from .edfacts_collector import EdFactsCollector
+from .naep_collector import NAEPDataCollector
+from .ocr_collector import OCRCollector
 
 __all__ = [
-    "NAEPDataCollector",
+    # Common utilities
+    "APIClient",
+    "DataValidator",
+    "FileUtils", 
+    "SafeTypeConverter",
+    "StateUtils",
+    # Base classes
+    "APIBasedCollector",
+    "BaseDataCollector", 
+    "FileBasedCollector",
+    # Specific collectors
     "CensusEducationFinance",
-    # TODO: Add these when implemented
-    # 'EdFactsCollector',
-    # 'OCRDataCollector',
-    # 'PolicyDatabaseBuilder',
-    # 'run_full_data_collection'
+    "CensusDataParser",
+    "CensusFileDownloader",
+    "EdFactsCollector", 
+    "NAEPDataCollector",
+    "OCRCollector",
 ]

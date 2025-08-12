@@ -5,14 +5,17 @@ Collects special education data from the U.S. Department of Education's EdFacts 
 """
 
 import logging
-import time
 from pathlib import Path
+import time
 
 import pandas as pd
 import requests
 
+from .base_collector import FileBasedCollector
+from .common import StateUtils
 
-class EdFactsCollector:
+
+class EdFactsCollector(FileBasedCollector):
     """
     Collect EdFacts IDEA Part B data including:
     - Child count by disability category
@@ -28,8 +31,7 @@ class EdFactsCollector:
         Args:
             rate_limit_delay: Seconds to wait between requests
         """
-        self.logger = logging.getLogger(__name__)
-        self.rate_limit_delay = rate_limit_delay
+        super().__init__(rate_limit_delay=rate_limit_delay)
 
         # Base URLs for data files
         self.osep_base_url = "https://www2.ed.gov/programs/osepidea/618-data/state-level-data-files/part-b-data"
@@ -96,60 +98,9 @@ class EdFactsCollector:
             },
         }
 
-        # State abbreviations for filtering
-        self.state_codes = [
-            "AL",
-            "AK",
-            "AZ",
-            "AR",
-            "CA",
-            "CO",
-            "CT",
-            "DE",
-            "DC",
-            "FL",
-            "GA",
-            "HI",
-            "ID",
-            "IL",
-            "IN",
-            "IA",
-            "KS",
-            "KY",
-            "LA",
-            "ME",
-            "MD",
-            "MA",
-            "MI",
-            "MN",
-            "MS",
-            "MO",
-            "MT",
-            "NE",
-            "NV",
-            "NH",
-            "NJ",
-            "NM",
-            "NY",
-            "NC",
-            "ND",
-            "OH",
-            "OK",
-            "OR",
-            "PA",
-            "RI",
-            "SC",
-            "SD",
-            "TN",
-            "TX",
-            "UT",
-            "VT",
-            "VA",
-            "WA",
-            "WV",
-            "WI",
-            "WY",
-        ]
+        # State utilities for consistent state handling
+        self.state_utils = StateUtils()
+        self.state_codes = self.state_utils.get_all_states()
 
     def download_csv_file(self, url: str, output_path: Path) -> bool:
         """
@@ -368,7 +319,7 @@ class EdFactsCollector:
 
             # Filter to only include states (not territories or national totals)
             if "state" in df.columns:
-                df = df[df["state"].isin(self.state_codes + ["DC"])]
+                df = df[df["state"].isin(self.state_codes)]
 
             self.logger.info(f"Parsed {len(df)} records from {file_path}")
 
@@ -378,6 +329,28 @@ class EdFactsCollector:
             self.logger.error(f"Error parsing {file_path}: {e}")
             return pd.DataFrame()
 
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """
+        Fetch EdFacts data (required by abstract base class)
+        
+        Args:
+            **kwargs: Additional arguments (years, output_dir, data_type)
+            
+        Returns:
+            Combined DataFrame with all collected data
+        """
+        years = kwargs.get('years', [2019, 2020, 2021])
+        output_dir = kwargs.get('output_dir', Path('.'))
+        data_type = kwargs.get('data_type', 'all')
+        
+        if data_type == 'all':
+            results = self.collect_all_data(years, output_dir)
+            # Return empty DataFrame for now - parsing would be implemented separately
+            return pd.DataFrame()
+        else:
+            # Handle specific data types
+            return pd.DataFrame()
+    
     def collect_all_data(
         self, years: list[int], output_dir: Path
     ) -> dict[str, dict[int, Path]]:

@@ -4,20 +4,20 @@ NAEP Data Collector
 Implements NAEP API integration per data-collection-prd.md Section 2
 """
 
-import logging
 import os
-import time
-from pathlib import Path
+from typing import Any
 
 import pandas as pd
-import requests
 from dotenv import load_dotenv
+
+from .base_collector import APIBasedCollector
+from .common import SafeTypeConverter, StateUtils
 
 # Load environment variables
 load_dotenv()
 
 
-class NAEPDataCollector:
+class NAEPDataCollector(APIBasedCollector):
     """
     Automated NAEP data collection for state-level special education analysis
 
@@ -25,17 +25,16 @@ class NAEPDataCollector:
     """
 
     def __init__(self, rate_limit_delay: float | None = None):
-        self.base_url = (
-            "https://www.nationsreportcard.gov/DataService/GetAdhocData.aspx"
-        )
         # Load rate limit from environment or use default
-        self.rate_limit_delay = rate_limit_delay or float(
-            os.getenv("NAEP_RATE_LIMIT_DELAY", "6.0")
+        default_delay = float(os.getenv("NAEP_RATE_LIMIT_DELAY", "6.0"))
+        
+        super().__init__(
+            base_url="https://www.nationsreportcard.gov/DataService/GetAdhocData.aspx",
+            rate_limit_delay=rate_limit_delay or default_delay,
+            logger_name="NAEPDataCollector"
         )
-        self.results = []
-        self.logger = logging.getLogger(__name__)
 
-    def fetch_state_swd_data(
+    def fetch_data(
         self,
         years: list[int],
         grades: list[int] | None = None,
@@ -57,59 +56,8 @@ class NAEPDataCollector:
         if subjects is None:
             subjects = ["mathematics", "reading"]
 
-        # US state abbreviations for NAEP API
-        state_codes = [
-            "AL",
-            "AK",
-            "AZ",
-            "AR",
-            "CA",
-            "CO",
-            "CT",
-            "DE",
-            "FL",
-            "GA",
-            "HI",
-            "ID",
-            "IL",
-            "IN",
-            "IA",
-            "KS",
-            "KY",
-            "LA",
-            "ME",
-            "MD",
-            "MA",
-            "MI",
-            "MN",
-            "MS",
-            "MO",
-            "MT",
-            "NE",
-            "NV",
-            "NH",
-            "NJ",
-            "NM",
-            "NY",
-            "NC",
-            "ND",
-            "OH",
-            "OK",
-            "OR",
-            "PA",
-            "RI",
-            "SC",
-            "SD",
-            "TN",
-            "TX",
-            "UT",
-            "VT",
-            "VA",
-            "WA",
-            "WV",
-            "WI",
-            "WY",
-        ]
+        # Get all state codes from StateUtils
+        state_codes = self.state_utils.get_all_states()
 
         self.logger.info(
             f"Starting NAEP collection: {len(years)} years, {len(grades)} grades, {len(subjects)} subjects, {len(state_codes)} states"
@@ -138,11 +86,8 @@ class NAEPDataCollector:
                         }
 
                         try:
-                            response = requests.get(
-                                self.base_url, params=params, timeout=30
-                            )
-                            response.raise_for_status()
-
+                            # Make direct API request (NAEP doesn't use standard REST endpoints)
+                            response = self.api_client.get(self.base_url, params=params)
                             data = response.json()
 
                             # Parse API response structure
@@ -158,19 +103,12 @@ class NAEPDataCollector:
                                 f"Successfully collected {subject} grade {grade} year {year} state {state_code}"
                             )
 
-                        except requests.exceptions.RequestException as e:
+                        except Exception as e:
                             self.logger.error(
                                 f"Request failed for {subject} grade {grade} year {year} state {state_code}: {str(e)}"
                             )
-
-                        except Exception as e:
-                            self.logger.error(
-                                f"Unexpected error for {subject} grade {grade} year {year} state {state_code}: {str(e)}"
-                            )
-
-                        # Rate limiting - respect API limits
-                        if request_count < total_requests:
-                            time.sleep(self.rate_limit_delay)
+                            # Rate limiting is handled by base class
+                            continue
 
         df = pd.DataFrame(self.results)
         self.logger.info(f"NAEP collection completed: {len(df)} records collected")
@@ -243,14 +181,10 @@ class NAEPDataCollector:
         Returns:
             Float value or None if invalid/missing
         """
-
-        if value in [None, "", "null", "‡", "*", "N/A", "#"]:
-            return None
-
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
+        return SafeTypeConverter.safe_float(
+            value, 
+            invalid_values=[None, "", "null", "‡", "*", "N/A", "#"]
+        )
 
     def _convert_state_name_to_code(self, state_name: str) -> str | None:
         """
@@ -262,62 +196,7 @@ class NAEPDataCollector:
         Returns:
             Two-letter state code or None if not found
         """
-
-        state_mapping = {
-            "Alabama": "AL",
-            "Alaska": "AK",
-            "Arizona": "AZ",
-            "Arkansas": "AR",
-            "California": "CA",
-            "Colorado": "CO",
-            "Connecticut": "CT",
-            "Delaware": "DE",
-            "Florida": "FL",
-            "Georgia": "GA",
-            "Hawaii": "HI",
-            "Idaho": "ID",
-            "Illinois": "IL",
-            "Indiana": "IN",
-            "Iowa": "IA",
-            "Kansas": "KS",
-            "Kentucky": "KY",
-            "Louisiana": "LA",
-            "Maine": "ME",
-            "Maryland": "MD",
-            "Massachusetts": "MA",
-            "Michigan": "MI",
-            "Minnesota": "MN",
-            "Mississippi": "MS",
-            "Missouri": "MO",
-            "Montana": "MT",
-            "Nebraska": "NE",
-            "Nevada": "NV",
-            "New Hampshire": "NH",
-            "New Jersey": "NJ",
-            "New Mexico": "NM",
-            "New York": "NY",
-            "North Carolina": "NC",
-            "North Dakota": "ND",
-            "Ohio": "OH",
-            "Oklahoma": "OK",
-            "Oregon": "OR",
-            "Pennsylvania": "PA",
-            "Rhode Island": "RI",
-            "South Carolina": "SC",
-            "South Dakota": "SD",
-            "Tennessee": "TN",
-            "Texas": "TX",
-            "Utah": "UT",
-            "Vermont": "VT",
-            "Virginia": "VA",
-            "Washington": "WA",
-            "West Virginia": "WV",
-            "Wisconsin": "WI",
-            "Wyoming": "WY",
-            "District of Columbia": "DC",
-        }
-
-        return state_mapping.get(state_name.strip() if state_name else None)
+        return self.state_utils.name_to_abbrev(state_name)
 
     def validate_data(self, df: pd.DataFrame) -> dict:
         """
@@ -410,42 +289,39 @@ class NAEPDataCollector:
 
         return validation
 
-    def save_data(self, df: pd.DataFrame, output_path: str | None = None) -> bool:
+    def _get_default_output_path(self) -> str:
         """
-        Save collected NAEP data to file
-
-        Args:
-            df: NAEP DataFrame to save
-            output_path: Path to save file (if None, uses environment variable or default)
+        Get default output path for NAEP data.
 
         Returns:
-            True if successful, False otherwise
+            Default file path for saving NAEP data
         """
+        return self.file_utils.get_default_output_path(
+            "naep_raw.csv", 
+            env_var="RAW_DATA_DIR", 
+            default_dir="data/raw"
+        )
 
-        # Use provided path or load from environment
-        if output_path is None:
-            raw_data_dir = os.getenv("RAW_DATA_DIR", "data/raw/")
-            output_path = os.path.join(raw_data_dir, "naep_raw.csv")
 
-        try:
-            # Ensure output directory exists
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-
-            # Save to CSV
-            df.to_csv(output_path, index=False)
-
-            self.logger.info(f"NAEP data saved to {output_path}: {len(df)} records")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Failed to save NAEP data: {str(e)}")
-            return False
+    # Convenience method for backward compatibility
+    def fetch_state_swd_data(
+        self,
+        years: list[int],
+        grades: list[int] | None = None,
+        subjects: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """
+        Fetch NAEP data by state for students with disabilities.
+        This method provides backward compatibility.
+        """
+        return self.fetch_data(years=years, grades=grades, subjects=subjects)
 
 
 def main():
     """
     Example usage of NAEPDataCollector
     """
+    import logging
 
     # Configure logging
     logging.basicConfig(
@@ -459,16 +335,8 @@ def main():
     years = [2017, 2019, 2022]  # Available NAEP years
 
     try:
-        # Collect data
-        df = collector.fetch_state_swd_data(years)
-
-        # Validate data
-        validation = collector.validate_data(df)
-        print(f"Validation results: {validation}")
-
-        # Save data
-        collector.save_data(df)
-
+        # Use the new base class method for complete workflow
+        df = collector.run_collection(years=years, save_data=True)
         print(f"Collection completed successfully: {len(df)} records")
 
     except Exception as e:
