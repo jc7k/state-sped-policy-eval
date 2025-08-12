@@ -59,11 +59,56 @@ class NAEPDataCollector:
 
         # US state abbreviations for NAEP API
         state_codes = [
-            'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-            'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-            'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-            'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-            'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+            "AL",
+            "AK",
+            "AZ",
+            "AR",
+            "CA",
+            "CO",
+            "CT",
+            "DE",
+            "FL",
+            "GA",
+            "HI",
+            "ID",
+            "IL",
+            "IN",
+            "IA",
+            "KS",
+            "KY",
+            "LA",
+            "ME",
+            "MD",
+            "MA",
+            "MI",
+            "MN",
+            "MS",
+            "MO",
+            "MT",
+            "NE",
+            "NV",
+            "NH",
+            "NJ",
+            "NM",
+            "NY",
+            "NC",
+            "ND",
+            "OH",
+            "OK",
+            "OR",
+            "PA",
+            "RI",
+            "SC",
+            "SD",
+            "TN",
+            "TX",
+            "UT",
+            "VT",
+            "VA",
+            "WA",
+            "WV",
+            "WI",
+            "WY",
         ]
 
         self.logger.info(
@@ -152,21 +197,21 @@ class NAEPDataCollector:
             # Extract state information from API response
             state_name = state_data.get("jurisLabel", "")
             jurisdiction = state_data.get("jurisdiction", "")
-            
+
             # Extract disability status information
             var_value = state_data.get("varValue", "")
             var_value_label = state_data.get("varValueLabel", "")
             score = state_data.get("value")
-            
+
             # Check if this is valid data
             if not state_name or score is None:
                 return None
-            
+
             # Determine if this is SWD or non-SWD data based on varValue
             # varValue "1" = "Identified as students with disabilities"
             # varValue "2" = "Not identified as students with disabilities"
             is_swd = var_value == "1"
-            
+
             # Create standardized record
             record = {
                 "state": jurisdiction,  # State abbreviation from API
@@ -179,9 +224,9 @@ class NAEPDataCollector:
                 "mean_score": float(score),
                 "var_value": var_value,
                 "error_flag": state_data.get("errorFlag"),
-                "is_displayable": state_data.get("isStatDisplayable", 0) == 1
+                "is_displayable": state_data.get("isStatDisplayable", 0) == 1,
             }
-            
+
             return record
 
         except (ValueError, TypeError, KeyError) as e:

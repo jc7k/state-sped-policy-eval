@@ -75,6 +75,6 @@ Policy reforms showed mixed resilience effects during the pandemic, with no stat
 
 *This brief summarizes findings from "Special Education State Policy Analysis: A Quasi-Experimental Analysis Using COVID-19 as a Natural Experiment"*
 
-**Contact**: Jeff Chen, jeffreyc1@alumni.cmu.edu  
+**Contact**: Jeff Chen, https://www.linkedin.com/in/jeffchen/
 **Collaboration**: This report and analysis code were created in collaboration with Claude Code  
 **Full Results**: Available in output/tables/ and output/figures/ directories

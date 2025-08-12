@@ -7,77 +7,82 @@ of methodology, limitations, future research requirements, and detailed policy
 recommendations based on the complete econometric analysis.
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
 import json
-from datetime import datetime
 import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 class DetailedPolicyReportGenerator:
     """
     Generate comprehensive policy report with detailed methodology,
     limitations analysis, and future research recommendations.
     """
-    
-    def __init__(self, project_root: Optional[Path] = None):
+
+    def __init__(self, project_root: Path | None = None):
         """Initialize the detailed policy report generator."""
         if project_root is None:
             project_root = Path(__file__).parent.parent.parent
-        
+
         self.project_root = Path(project_root)
         self.output_dir = self.project_root / "output"
         self.tables_dir = self.output_dir / "tables"
         self.figures_dir = self.output_dir / "figures"
         self.reports_dir = self.output_dir / "reports"
-        
+
         # Create reports directory if it doesn't exist
         self.reports_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"DetailedPolicyReportGenerator initialized: Project root: {self.project_root}")
 
-    def load_results_summary(self) -> Dict[str, Any]:
+        logger.info(
+            f"DetailedPolicyReportGenerator initialized: Project root: {self.project_root}"
+        )
+
+    def load_results_summary(self) -> dict[str, Any]:
         """Load results from main results table and other sources."""
         results_summary = {}
-        
+
         # Load main results
         main_results_file = self.reports_dir / "main_results_table.csv"
         if main_results_file.exists():
-            results_summary['main_results'] = pd.read_csv(main_results_file)
+            results_summary["main_results"] = pd.read_csv(main_results_file)
             logger.info("Loaded main results table")
-        
+
         # Load summary statistics
         summary_stats_file = self.reports_dir / "summary_statistics.csv"
         if summary_stats_file.exists():
-            results_summary['summary_stats'] = pd.read_csv(summary_stats_file)
+            results_summary["summary_stats"] = pd.read_csv(summary_stats_file)
             logger.info("Loaded summary statistics")
-            
+
         # Load publication summary for metadata
         pub_summary_file = self.reports_dir / "publication_summary.json"
         if pub_summary_file.exists():
-            with open(pub_summary_file, 'r') as f:
-                results_summary['metadata'] = json.load(f)
+            with open(pub_summary_file) as f:
+                results_summary["metadata"] = json.load(f)
             logger.info("Loaded publication metadata")
-            
+
         return results_summary
 
     def create_detailed_policy_report(self) -> str:
         """
         Create comprehensive policy report with detailed methodology and recommendations.
-        
+
         Returns:
             Formatted detailed policy report text
         """
         logger.info("Creating detailed policy report...")
-        
+
         # Load results for reference
-        results = self.load_results_summary()
-        
+        self.load_results_summary()
+
         # Create comprehensive policy report
         report_text = f"""
 # SPECIAL EDUCATION STATE POLICY ANALYSIS
@@ -85,7 +90,7 @@ class DetailedPolicyReportGenerator:
 
 **Executive Summary for Policymakers and Research Community**
 
-**Generated**: {datetime.now().strftime('%B %d, %Y')}  
+**Generated**: {datetime.now().strftime("%B %d, %Y")}  
 **Study Period**: 2009-2023  
 **Geographic Scope**: All 50 states plus District of Columbia  
 **Repository**: https://github.com/jc7k/state-sped-policy-eval
@@ -760,40 +765,42 @@ The stakes for special education policy could not be higher—with over 7 millio
 ---
 
 *Report Length: ~8,000 words*
-*Last Updated: {datetime.now().strftime('%B %d, %Y')}*
+*Last Updated: {datetime.now().strftime("%B %d, %Y")}*
 """
-        
+
         logger.info("Detailed policy report created")
         return report_text
 
     def save_detailed_report(self) -> Path:
         """Save the detailed policy report to file."""
         logger.info("Saving detailed policy report...")
-        
+
         # Generate report content
         report_content = self.create_detailed_policy_report()
-        
+
         # Save to file
         report_file = self.reports_dir / "detailed_policy_report.md"
-        with open(report_file, 'w') as f:
+        with open(report_file, "w") as f:
             f.write(report_content)
-        
+
         logger.info(f"Detailed policy report saved: {report_file}")
         return report_file
+
 
 def main():
     """Main execution function."""
     # Initialize generator
     generator = DetailedPolicyReportGenerator()
-    
+
     # Generate detailed policy report
     report_file = generator.save_detailed_report()
-    
-    print(f"\n✅ Detailed policy report generation complete!")
+
+    print("\n✅ Detailed policy report generation complete!")
     print(f"Comprehensive report saved to: {report_file}")
-    print(f"Report length: ~8,000 words with detailed methodology and recommendations")
-    
+    print("Report length: ~8,000 words with detailed methodology and recommendations")
+
     return report_file
+
 
 if __name__ == "__main__":
     main()

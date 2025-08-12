@@ -2914,6 +2914,12 @@ docs = [
     { name = "pandoc" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "arviz", marker = "extra == 'advanced'", specifier = ">=0.15.0" },
@@ -2951,6 +2957,12 @@ requires-dist = [
     { name = "xlrd", specifier = ">=2.0.2" },
 ]
 provides-extras = ["dev", "docs", "advanced"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+]
 
 [[package]]
 name = "statsmodels"
