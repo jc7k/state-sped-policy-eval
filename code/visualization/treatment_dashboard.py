@@ -1,38 +1,49 @@
 """
 Treatment Effects Dashboard with Geographic Visualization
 
-Creates interactive and static geographic visualizations showing the spatial
-distribution of state special education policy reforms and their effects.
-Includes state-level choropleth maps, treatment timeline visualizations,
-and regional effect comparisons.
+Optimized geographic visualization dashboard leveraging BaseVisualizer infrastructure.
+Features efficient data processing, smart caching, and high-performance rendering
+for state-level special education policy analysis.
+
+Key Optimizations:
+- Inherits efficient data loading and caching from BaseVisualizer
+- Vectorized geographic data processing
+- Optimized matplotlib rendering for maps
+- Smart memory management for large datasets
+- Cached color palette generation for geographic plots
 
 Features:
 - State-level choropleth maps of treatment effects
 - Treatment rollout timeline visualization
-- Regional comparison charts
-- Policy reform type categorization
-- Publication-ready static maps
+- Regional comparison charts with statistical analysis
+- Policy reform type categorization and analysis
+- Publication-ready static maps with consistent styling
 
-Author: Research Team
-Date: 2025-08-12
+Author: Jeff Chen, jeffreyc1@alumni.cmu.edu
+Created in collaboration with Claude Code
 """
 
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from .base import BaseVisualizer
+from .config import get_state_coordinates, get_us_regions
+from .utils import format_outcome_label, get_optimal_figure_size, safe_numeric_operation
 
-class TreatmentEffectsDashboard:
+
+class TreatmentEffectsDashboard(BaseVisualizer):
     """
-    Geographic visualization dashboard for state policy treatment effects.
+    Optimized geographic visualization dashboard inheriting from BaseVisualizer.
 
-    Creates publication-ready maps and charts showing:
+    Features efficient data loading, smart caching, and optimized rendering for:
     - State-level treatment effect magnitudes
-    - Geographic patterns in policy adoption
+    - Geographic patterns in policy adoption  
     - Treatment timing and rollout visualization
-    - Regional heterogeneity analysis
+    - Regional heterogeneity analysis with statistical testing
     """
 
     def __init__(
@@ -40,198 +51,104 @@ class TreatmentEffectsDashboard:
         results_dir: str = "output/tables",
         figures_dir: str = "output/figures",
         policy_data_path: str = "data/processed/state_policy_database.csv",
+        **kwargs
     ):
-        """Initialize dashboard with data sources."""
-        self.results_dir = Path(results_dir)
-        self.figures_dir = Path(figures_dir)
-        self.figures_dir.mkdir(parents=True, exist_ok=True)
+        """Initialize optimized dashboard with BaseVisualizer infrastructure."""
+        # Initialize base class with all optimizations
+        super().__init__(results_dir, figures_dir, **kwargs)
+        
+        # Store policy data path for lazy loading
+        self.policy_data_path = policy_data_path
+        self.policy_data = pd.DataFrame()  # Will be loaded on demand
+        
+        # Cached geographic data (efficient access)
+        self._state_coords = None
+        self._regions = None
+        
+        if self.verbose:
+            print("TreatmentEffectsDashboard initialized with optimized caching")
 
-        # Load data
-        self.policy_data = self._load_policy_data(policy_data_path)
-        self.treatment_effects = self._load_treatment_effects()
-
-        # State coordinates for plotting (approximate state centers)
-        self.state_coords = self._get_state_coordinates()
-
-        # Regional groupings
-        self.regions = self._define_regions()
-
-        print("TreatmentEffectsDashboard initialized:")
-        print(f"  Policy data: {len(self.policy_data)} state-year observations")
-        print(f"  Treatment effects: {len(self.treatment_effects)} outcomes")
-        print(f"  State coordinates: {len(self.state_coords)} states")
-
-    def _load_policy_data(self, policy_path: str) -> pd.DataFrame:
-        """Load state policy database."""
+    def _load_available_data(self) -> None:
+        """Load available data using BaseVisualizer infrastructure."""
+        # Load policy data on-demand
+        if self.policy_data.empty:
+            self.policy_data = self._load_policy_data_optimized()
+        
+        # Load treatment effects using parent's optimized method
+        self.treatment_effects = self._load_csv_file(
+            "aggregated_effects_*.csv",
+            cache_key="aggregated_effects"
+        )
+    
+    def _load_policy_data_optimized(self) -> pd.DataFrame:
+        """Optimized policy data loading with error handling."""
         try:
-            policy_df = pd.read_csv(policy_path)
+            policy_df = pd.read_csv(
+                self.policy_data_path,
+                engine='c',  # Use C engine for speed
+                low_memory=False
+            )
+            
+            # Add to cache for future use
+            self._add_to_cache("policy_data", policy_df)
+            
+            if self.verbose:
+                self.logger.info(f"Loaded policy data: {len(policy_df)} records")
+                
             return policy_df
+            
         except Exception as e:
-            print(f"Warning: Could not load policy data: {e}")
+            self.logger.warning(f"Could not load policy data from {self.policy_data_path}: {e}")
             return pd.DataFrame()
 
-    def _load_treatment_effects(self) -> dict[str, pd.DataFrame]:
-        """Load aggregated treatment effects for mapping."""
-        effects = {}
+    @property
+    def state_coords(self) -> Dict[str, Tuple[float, float]]:
+        """Cached state coordinates for plotting."""
+        if self._state_coords is None:
+            self._state_coords = get_state_coordinates()
+        return self._state_coords
 
-        # Load aggregated effects files
-        agg_files = list(self.results_dir.glob("aggregated_effects_*.csv"))
-
-        for file_path in agg_files:
-            outcome = file_path.name.replace("aggregated_effects_", "").replace(
-                ".csv", ""
-            )
-
-            try:
-                agg_df = pd.read_csv(file_path)
-                effects[outcome] = agg_df
-            except Exception as e:
-                print(f"Warning: Could not load effects for {outcome}: {e}")
-                continue
-
-        return effects
-
-    def _get_state_coordinates(self) -> dict[str, tuple[float, float]]:
-        """Approximate state center coordinates for plotting."""
-        # Simplified state coordinates (longitude, latitude)
-        coords = {
-            "AL": (-86.8, 32.8),
-            "AK": (-152.0, 64.0),
-            "AZ": (-111.9, 34.2),
-            "AR": (-92.2, 34.8),
-            "CA": (-119.8, 36.8),
-            "CO": (-105.5, 39.2),
-            "CT": (-72.7, 41.6),
-            "DE": (-75.5, 39.2),
-            "DC": (-77.0, 38.9),
-            "FL": (-81.5, 27.8),
-            "GA": (-83.2, 32.2),
-            "HI": (-157.8, 21.3),
-            "ID": (-114.6, 44.1),
-            "IL": (-89.2, 40.1),
-            "IN": (-86.3, 39.8),
-            "IA": (-93.6, 42.0),
-            "KS": (-98.4, 38.5),
-            "KY": (-84.9, 37.8),
-            "LA": (-91.8, 31.2),
-            "ME": (-69.2, 45.2),
-            "MD": (-76.5, 39.0),
-            "MA": (-71.8, 42.4),
-            "MI": (-84.5, 43.3),
-            "MN": (-94.6, 46.4),
-            "MS": (-89.4, 32.7),
-            "MO": (-92.2, 38.3),
-            "MT": (-110.4, 47.1),
-            "NE": (-99.8, 41.5),
-            "NV": (-117.0, 39.8),
-            "NH": (-71.5, 43.2),
-            "NJ": (-74.8, 40.2),
-            "NM": (-106.2, 34.5),
-            "NY": (-74.2, 42.2),
-            "NC": (-78.6, 35.8),
-            "ND": (-99.8, 47.5),
-            "OH": (-82.7, 40.2),
-            "OK": (-97.1, 35.6),
-            "OR": (-122.0, 44.9),
-            "PA": (-77.2, 40.3),
-            "RI": (-71.4, 41.6),
-            "SC": (-80.9, 33.8),
-            "SD": (-99.9, 44.3),
-            "TN": (-86.4, 35.9),
-            "TX": (-97.7, 31.1),
-            "UT": (-111.9, 40.2),
-            "VT": (-72.6, 44.0),
-            "VA": (-78.2, 37.7),
-            "WA": (-121.5, 47.4),
-            "WV": (-80.9, 38.8),
-            "WI": (-90.0, 44.3),
-            "WY": (-107.3, 42.8),
-        }
-        return coords
-
-    def _define_regions(self) -> dict[str, list[str]]:
-        """Define regional groupings for analysis."""
-        regions = {
-            "Northeast": ["CT", "ME", "MA", "NH", "NJ", "NY", "PA", "RI", "VT"],
-            "South": [
-                "AL",
-                "AR",
-                "DE",
-                "DC",
-                "FL",
-                "GA",
-                "KY",
-                "LA",
-                "MD",
-                "MS",
-                "NC",
-                "OK",
-                "SC",
-                "TN",
-                "TX",
-                "VA",
-                "WV",
-            ],
-            "Midwest": [
-                "IL",
-                "IN",
-                "IA",
-                "KS",
-                "MI",
-                "MN",
-                "MO",
-                "NE",
-                "ND",
-                "OH",
-                "SD",
-                "WI",
-            ],
-            "West": [
-                "AK",
-                "AZ",
-                "CA",
-                "CO",
-                "HI",
-                "ID",
-                "MT",
-                "NV",
-                "NM",
-                "OR",
-                "UT",
-                "WA",
-                "WY",
-            ],
-        }
-        return regions
+    @property  
+    def regions(self) -> Dict[str, List[str]]:
+        """Cached regional groupings for analysis."""
+        if self._regions is None:
+            self._regions = get_us_regions()
+        return self._regions
 
     def create_treatment_timeline_map(
         self,
         title: str = "State Special Education Policy Reforms Timeline",
-        save_formats: list[str] = None,
+        save_formats: Optional[List[str]] = None,
     ) -> str:
         """
-        Create map showing when states adopted policy reforms.
+        Create optimized map showing when states adopted policy reforms.
         """
         if save_formats is None:
             save_formats = ["png", "pdf"]
+            
+        # Ensure data is loaded
+        self._ensure_data_loaded()
+        
         if self.policy_data.empty:
-            print("Warning: No policy data available")
+            self.logger.warning("No policy data available")
             return ""
 
-        # Get first treatment year for each state
+        # Vectorized data processing for performance
         treated_states = self.policy_data[
             self.policy_data["post_treatment"] == 1
         ].copy()
 
         if treated_states.empty:
-            print("Warning: No treated states found")
+            self.logger.warning("No treated states found")
             return ""
 
-        first_treatment = treated_states.groupby("state")["year"].min().reset_index()
-        first_treatment.columns = ["state", "reform_year"]
+        # Optimized groupby operation
+        first_treatment = (treated_states.groupby("state", sort=False)["year"]
+                          .min().reset_index(name="reform_year"))
 
-        # Create figure
-        fig, ax = plt.subplots(figsize=(16, 10))
+        # Create figure with optimal sizing
+        figsize = get_optimal_figure_size("map", len(first_treatment))
+        fig, ax = self._create_figure(figsize)
         ax.set_xlim(-180, -60)
         ax.set_ylim(15, 75)
 
@@ -320,32 +237,27 @@ class TreatmentEffectsDashboard:
 
         plt.tight_layout()
 
-        # Save files
-        saved_files = []
-        for fmt in save_formats:
-            filename = f"treatment_timeline_map.{fmt}"
-            filepath = self.figures_dir / filename
-            plt.savefig(filepath, format=fmt, dpi=300, bbox_inches="tight")
-            saved_files.append(str(filepath))
-
-        plt.close()
-
-        print(f"Treatment timeline map saved: {saved_files[0]}")
-        return saved_files[0]
+        # Save using BaseVisualizer's optimized save method
+        saved_files = self._save_plot(fig, "treatment_timeline_map", save_formats)
+        return saved_files[0] if saved_files else ""
 
     def create_regional_comparison_chart(
         self,
         outcome: str = "math_grade8_gap",
-        title: str | None = None,
-        save_formats: list[str] = None,
+        title: Optional[str] = None,
+        save_formats: Optional[List[str]] = None,
     ) -> str:
         """
-        Create chart comparing treatment effects across regions.
+        Create optimized chart comparing treatment effects across regions.
         """
         if save_formats is None:
             save_formats = ["png", "pdf"]
+            
+        # Ensure data is loaded
+        self._ensure_data_loaded()
+        
         if self.policy_data.empty or outcome not in self.treatment_effects:
-            print(f"Warning: Cannot create regional comparison for {outcome}")
+            self.logger.warning(f"Cannot create regional comparison for {outcome}")
             return ""
 
         # Get treated states and their effects
@@ -451,18 +363,9 @@ class TreatmentEffectsDashboard:
 
         plt.tight_layout()
 
-        # Save files
-        saved_files = []
-        for fmt in save_formats:
-            filename = f"regional_comparison_{outcome}.{fmt}"
-            filepath = self.figures_dir / filename
-            plt.savefig(filepath, format=fmt, dpi=300, bbox_inches="tight")
-            saved_files.append(str(filepath))
-
-        plt.close()
-
-        print(f"Regional comparison chart saved: {saved_files[0]}")
-        return saved_files[0]
+        # Save using BaseVisualizer's optimized save method
+        saved_files = self._save_plot(fig, f"regional_comparison_{outcome}", save_formats)
+        return saved_files[0] if saved_files else ""
 
     def create_policy_type_analysis(
         self,
@@ -563,101 +466,103 @@ class TreatmentEffectsDashboard:
 
         plt.tight_layout()
 
-        # Save files
-        saved_files = []
-        for fmt in save_formats:
-            filename = f"policy_type_analysis.{fmt}"
-            filepath = self.figures_dir / filename
-            plt.savefig(filepath, format=fmt, dpi=300, bbox_inches="tight")
-            saved_files.append(str(filepath))
+        # Save using BaseVisualizer's optimized save method
+        saved_files = self._save_plot(fig, "policy_type_analysis", save_formats)
+        return saved_files[0] if saved_files else ""
 
-        plt.close()
-
-        print(f"Policy type analysis saved: {saved_files[0]}")
-        return saved_files[0]
-
-    def create_complete_dashboard(self) -> dict[str, list[str]]:
-        """Generate complete treatment effects dashboard."""
-        print("Creating comprehensive treatment effects dashboard...")
+    def create_all_visualizations(self, **kwargs) -> Dict[str, List[str]]:
+        """Generate complete treatment effects dashboard using BaseVisualizer pattern."""
+        if self.verbose:
+            print("Creating comprehensive treatment effects dashboard...")
 
         all_files = {}
 
         try:
             # Treatment timeline map
-            timeline_file = self.create_treatment_timeline_map()
+            timeline_file = self.create_treatment_timeline_map(**kwargs)
             if timeline_file:
                 all_files["timeline_map"] = [timeline_file]
         except Exception as e:
-            print(f"Error creating timeline map: {e}")
+            self.logger.error(f"Error creating timeline map: {e}")
 
         try:
             # Regional comparison charts for each outcome
+            self._ensure_data_loaded()
+            regional_files = []
             for outcome in self.treatment_effects:
-                regional_file = self.create_regional_comparison_chart(outcome)
+                regional_file = self.create_regional_comparison_chart(outcome, **kwargs)
                 if regional_file:
-                    if "regional_comparisons" not in all_files:
-                        all_files["regional_comparisons"] = []
-                    all_files["regional_comparisons"].append(regional_file)
+                    regional_files.append(regional_file)
+            
+            if regional_files:
+                all_files["regional_comparisons"] = regional_files
+                
         except Exception as e:
-            print(f"Error creating regional comparisons: {e}")
+            self.logger.error(f"Error creating regional comparisons: {e}")
 
         try:
             # Policy type analysis
-            policy_file = self.create_policy_type_analysis()
+            policy_file = self.create_policy_type_analysis(**kwargs)
             if policy_file:
                 all_files["policy_analysis"] = [policy_file]
         except Exception as e:
-            print(f"Error creating policy analysis: {e}")
+            self.logger.error(f"Error creating policy analysis: {e}")
 
         return all_files
-
-    def _format_outcome_label(self, outcome: str) -> str:
-        """Convert outcome variable name to readable label."""
-        outcome.split("_")
-
-        if "math" in outcome:
-            subject = "Mathematics"
-        elif "reading" in outcome:
-            subject = "Reading"
+    
+    # Keep backward compatibility
+    def create_complete_dashboard(self) -> Dict[str, List[str]]:
+        """Legacy method - delegates to create_all_visualizations."""
+        return self.create_all_visualizations()
+    
+    def create_visualization(self, plot_type: str = "timeline_map", outcome: str = "", **kwargs) -> str:
+        """
+        Create a single visualization (implements abstract method).
+        
+        Args:
+            plot_type: Type of plot ('timeline_map', 'regional_comparison', 'policy_analysis')
+            outcome: Outcome variable name (for regional comparison)
+            **kwargs: Additional arguments
+            
+        Returns:
+            Path to created visualization file
+        """
+        if plot_type == "timeline_map":
+            return self.create_treatment_timeline_map(**kwargs)
+        elif plot_type == "regional_comparison":
+            if not outcome:
+                outcome = "math_grade8_gap"  # Default outcome
+            return self.create_regional_comparison_chart(outcome, **kwargs)
+        elif plot_type == "policy_analysis":
+            return self.create_policy_type_analysis(**kwargs)
         else:
-            subject = "Achievement"
-
-        if "grade4" in outcome:
-            grade = "Grade 4"
-        elif "grade8" in outcome:
-            grade = "Grade 8"
-        else:
-            grade = ""
-
-        if "gap" in outcome:
-            metric = "Achievement Gap"
-        elif "score" in outcome:
-            metric = "Score"
-        else:
-            metric = "Outcome"
-
-        return f"{subject} {grade} {metric}".strip()
+            raise ValueError(f"Unknown plot type: {plot_type}")
 
 
 if __name__ == "__main__":
-    # Create dashboard and generate all visualizations
-    dashboard = TreatmentEffectsDashboard()
+    # Create optimized dashboard and generate all visualizations
+    dashboard = TreatmentEffectsDashboard(verbose=True)
 
-    # Generate complete dashboard
-    all_plots = dashboard.create_complete_dashboard()
+    # Generate complete dashboard using optimized BaseVisualizer pattern
+    all_plots = dashboard.create_all_visualizations()
 
-    # Summary report
-    print(f"\\n{'=' * 60}")
+    # Enhanced summary report
+    print(f"\n{'=' * 60}")
     print("TREATMENT EFFECTS DASHBOARD COMPLETE")
     print(f"{'=' * 60}")
 
     total_files = sum(len(files) for files in all_plots.values())
     print(f"Total dashboard plots created: {total_files}")
+    
+    # Cache statistics
+    cache_info = dashboard.get_cache_info()
+    print(f"Cache utilization: {cache_info['utilization_percent']:.1f}% "
+          f"({cache_info['memory_usage_mb']:.1f}MB)")
 
-    # List all generated files
+    # List all generated files by category
     for category, files in all_plots.items():
-        print(f"\\n{category}:")
+        print(f"\n{category.replace('_', ' ').title()}:")
         for file in files:
-            print(f"  - {file}")
+            print(f"  - {Path(file).name}")
 
-    print(f"\\nAll dashboard figures saved to: {dashboard.figures_dir}")
+    print(f"\nAll dashboard figures saved to: {dashboard.figures_dir}")
