@@ -310,3 +310,7 @@ test_data/
 !output/figures/*.pdf
 !tests/fixtures/*.png
 !docs/**/*.png
+
+# Claude Code configuration
+.claude/
+!.claude/agents/
