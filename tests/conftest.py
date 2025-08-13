@@ -22,34 +22,20 @@ def sample_naep_api_response():
     return {
         'result': [
             {
-                'name': 'Alabama',
-                'datavalue': [
-                    {
-                        'categoryname': 'Students with IEP - Yes',
-                        'value': '245',
-                        'errorFlag': '3.2'
-                    },
-                    {
-                        'categoryname': 'Students with IEP - No',
-                        'value': '285',
-                        'errorFlag': '2.1'
-                    }
-                ]
+                'jurisLabel': 'Alabama',
+                'jurisdiction': 'AL',
+                'varValue': '1',
+                'varValueLabel': 'Identified as students with disabilities',
+                'value': '245',
+                'errorFlag': '3.2'
             },
             {
-                'name': 'California',
-                'datavalue': [
-                    {
-                        'categoryname': 'Students with IEP - Yes',
-                        'value': '252',
-                        'errorFlag': '2.8'
-                    },
-                    {
-                        'categoryname': 'Students with IEP - No',
-                        'value': '292',
-                        'errorFlag': '1.9'
-                    }
-                ]
+                'jurisLabel': 'Alabama', 
+                'jurisdiction': 'AL',
+                'varValue': '2',
+                'varValueLabel': 'Not identified as students with disabilities',
+                'value': '285',
+                'errorFlag': '2.1'
             }
         ]
     }

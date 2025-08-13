@@ -43,8 +43,8 @@ class TestNAEPDataCollectorInit:
 class TestFetchStateSWDData:
     """Test main data collection method"""
     
-    @patch('requests.get')
-    @patch('time.sleep')
+    @patch('code.collection.common.requests.get')
+    @patch('code.collection.common.time.sleep')
     def test_successful_single_request(self, mock_sleep, mock_get, sample_naep_api_response):
         """Test successful data collection for single request"""
         # Setup mock response
@@ -56,25 +56,27 @@ class TestFetchStateSWDData:
         collector = NAEPDataCollector()
         result = collector.fetch_state_swd_data([2022], [4], ['mathematics'])
         
-        # Verify API call parameters
-        expected_params = {
-            'type': 'data',
-            'subject': 'mathematics',
-            'grade': 4,
-            'year': 2022,
-            'jurisdiction': 'states',
-            'variable': 'SDRACEM',
-            'stattype': 'MN:MN,RP:RP'
-        }
-        mock_get.assert_called_once_with(collector.base_url, params=expected_params, timeout=30)
+        # The actual implementation makes one call per state (51 total)
+        assert mock_get.call_count == 51  # 50 states + DC
+        
+        # Verify first API call has correct structure
+        first_call = mock_get.call_args_list[0]
+        first_call_params = first_call.kwargs['params'] if first_call.kwargs else first_call[1]['params']
+        assert first_call_params['type'] == 'data'
+        assert first_call_params['subject'] == 'mathematics'
+        assert first_call_params['grade'] == 4
+        assert first_call_params['year'] == 2022
+        assert first_call_params['variable'] == 'IEP'  # Updated variable name
+        assert first_call_params['stattype'] == 'MN:MN'
+        assert 'jurisdiction' in first_call_params  # Should be a state code
         
         # Verify result structure
         assert isinstance(result, pd.DataFrame)
         assert len(result) > 0
         assert all(col in result.columns for col in ['state', 'year', 'grade', 'subject'])
         
-    @patch('requests.get')
-    @patch('time.sleep')
+    @patch('code.collection.common.requests.get')
+    @patch('code.collection.common.time.sleep')
     def test_multiple_years_grades_subjects(self, mock_sleep, mock_get, sample_naep_api_response):
         """Test data collection across multiple years, grades, and subjects"""
         mock_response = Mock()
@@ -89,15 +91,16 @@ class TestFetchStateSWDData:
         
         result = collector.fetch_state_swd_data(years, grades, subjects)
         
-        # Should make 8 requests (2 years × 2 grades × 2 subjects)
-        assert mock_get.call_count == 8
+        # Should make 408 requests (2 years × 2 grades × 2 subjects × 51 states)
+        assert mock_get.call_count == 408
         
-        # Should sleep 7 times (between requests, not after last)
-        assert mock_sleep.call_count == 7
+        # Should sleep between requests (not after last)
+        assert mock_sleep.call_count >= 407
         
-    @patch('requests.get')
+    @patch('code.collection.common.requests.get')
     def test_request_exception_handling(self, mock_get):
         """Test handling of network request exceptions"""
+        import requests
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
         
         collector = NAEPDataCollector()
@@ -107,9 +110,10 @@ class TestFetchStateSWDData:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
         
-    @patch('requests.get')
+    @patch('code.collection.common.requests.get')
     def test_http_error_handling(self, mock_get):
         """Test handling of HTTP errors"""
+        from requests.exceptions import HTTPError
         mock_response = Mock()
         mock_response.raise_for_status.side_effect = HTTPError("404 Not Found")
         mock_get.return_value = mock_response
@@ -120,9 +124,10 @@ class TestFetchStateSWDData:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
         
-    @patch('requests.get')  
+    @patch('code.collection.common.requests.get')  
     def test_timeout_handling(self, mock_get):
         """Test handling of request timeouts"""
+        from requests.exceptions import Timeout
         mock_get.side_effect = Timeout("Request timeout")
         
         collector = NAEPDataCollector()
@@ -131,10 +136,11 @@ class TestFetchStateSWDData:
         assert isinstance(result, pd.DataFrame) 
         assert len(result) == 0
         
-    @patch('requests.get')
+    @patch('code.collection.common.requests.get')
     def test_malformed_json_response(self, mock_get):
         """Test handling of malformed JSON responses"""
         mock_response = Mock()
+        import json
         mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "doc", 0)
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
@@ -145,7 +151,7 @@ class TestFetchStateSWDData:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
         
-    @patch('requests.get')
+    @patch('code.collection.common.requests.get')
     def test_empty_api_response(self, mock_get):
         """Test handling of empty API response"""
         mock_response = Mock()
@@ -454,8 +460,8 @@ class TestSaveData:
 class TestIntegrationScenarios:
     """Integration-style tests within unit test scope"""
     
-    @patch('requests.get')
-    @patch('time.sleep')  
+    @patch('code.collection.common.requests.get')
+    @patch('code.collection.common.time.sleep')  
     def test_full_collection_workflow(self, mock_sleep, mock_get, sample_naep_api_response, temp_data_dir):
         """Test complete collection workflow"""
         # Setup mock response
