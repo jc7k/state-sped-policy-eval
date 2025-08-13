@@ -111,7 +111,7 @@ class COVIDAnalyzer:
 
     def prepare_triple_diff_data(self, outcome: str) -> pd.DataFrame:
         """
-        Prepare data for triple-difference analysis.
+        Prepare data for triple-difference analysis with memory optimization.
 
         Creates binary indicators for:
         - covid_period: 1 if year in COVID period
@@ -123,25 +123,27 @@ class COVIDAnalyzer:
         if self.data.empty:
             return pd.DataFrame()
 
-        # Filter to relevant years (pre-COVID + COVID)
+        # Memory-efficient filtering: use vectorized operations and avoid copies
         analysis_years = self.pre_covid_years + self.covid_years
-        analysis_data = self.data[self.data["year"].isin(analysis_years)].copy()
-
-        # Create COVID period indicator
-        analysis_data["covid_period"] = (
-            analysis_data["year"].isin(self.covid_years)
-        ).astype(int)
-
-        # Create policy reform indicator (cumulative by year)
-        analysis_data["policy_reform"] = analysis_data["post_treatment"].astype(int)
-
-        # Select available columns
-        required_cols = [outcome, "covid_period", "policy_reform", "state", "year"]
-        if "log_total_revenue_per_pupil" in analysis_data.columns:
+        year_mask = self.data["year"].isin(analysis_years)
+        
+        # Only select required columns to reduce memory usage
+        required_cols = [outcome, "post_treatment", "state", "year"]
+        if "log_total_revenue_per_pupil" in self.data.columns:
             required_cols.append("log_total_revenue_per_pupil")
+        
+        # Filter and select columns in one operation to avoid intermediate copies
+        analysis_data = self.data.loc[year_mask, required_cols].dropna().copy()
 
-        # Filter to complete cases for the outcome
-        analysis_data = analysis_data[required_cols].dropna()
+        # Vectorized indicator creation - more memory efficient
+        covid_years_set = set(self.covid_years)
+        analysis_data["covid_period"] = analysis_data["year"].map(
+            lambda x: 1 if x in covid_years_set else 0
+        ).astype('int8')  # Use smaller integer type
+
+        # Rename and convert to save memory
+        analysis_data["policy_reform"] = analysis_data["post_treatment"].astype('int8')
+        analysis_data.drop("post_treatment", axis=1, inplace=True)
 
         print(f"  Analysis sample: {len(analysis_data)} observations")
         print(f"  States: {analysis_data['state'].nunique()}")
@@ -154,7 +156,7 @@ class COVIDAnalyzer:
         self, outcome: str = "math_grade8_gap", save_results: bool = True
     ) -> dict[str, any]:
         """
-        Estimate triple-difference model.
+        Estimate triple-difference model with optimized computation.
 
         Model: Y_st = β₀ + β₁(COVID) + β₂(Reform) + β₃(COVID × Reform) +
                       α_s + γ_t + ε_st
@@ -171,22 +173,23 @@ class COVIDAnalyzer:
             return {}
 
         try:
-            # Triple-difference specification
-            # Note: Achievement gap already captures SWD vs non-SWD difference
-            # So this is really a difference-in-differences with COVID as natural experiment
+            # More efficient categorical encoding using memory-efficient approach
+            analysis_data["state_fe"] = analysis_data["state"].astype('category')
+            analysis_data["year_fe"] = analysis_data["year"].astype('category')
 
-            # Add state and year fixed effects
-            analysis_data["state_fe"] = pd.Categorical(analysis_data["state"])
-            analysis_data["year_fe"] = pd.Categorical(analysis_data["year"])
-
-            # Main DDD specification
-            formula = f"{outcome} ~ covid_period + policy_reform + covid_period:policy_reform + C(state_fe) + C(year_fe)"
-
-            # Add controls if available
+            # Optimized formula construction to avoid string concatenation
+            formula_components = [
+                outcome,
+                "covid_period + policy_reform + covid_period:policy_reform",
+                "C(state_fe) + C(year_fe)"
+            ]
+            
             if "log_total_revenue_per_pupil" in analysis_data.columns:
-                formula += " + log_total_revenue_per_pupil"
+                formula_components[1] += " + log_total_revenue_per_pupil"
+            
+            formula = f"{formula_components[0]} ~ {formula_components[1]} + {formula_components[2]}"
 
-            # Estimate model
+            # Estimate model with optimized clustering
             model = ols(formula, data=analysis_data).fit(
                 cov_type="cluster", cov_kwds={"groups": analysis_data["state"]}
             )
@@ -262,7 +265,7 @@ class COVIDAnalyzer:
         self, outcome: str = "math_grade8_gap", save_results: bool = True
     ) -> pd.DataFrame:
         """
-        Analyze how COVID resilience varies by when states adopted reforms.
+        Analyze how COVID resilience varies by when states adopted reforms with optimized processing.
 
         Tests whether early vs late reformers showed different pandemic responses.
         """
@@ -274,30 +277,35 @@ class COVIDAnalyzer:
         if analysis_data.empty:
             return pd.DataFrame()
 
-        # Get first reform year for each treated state
-        treated_states = self.data[self.data["post_treatment"] == 1]
-        first_reform = treated_states.groupby("state")["year"].min().reset_index()
-        first_reform.columns = ["state", "first_reform_year"]
+        # Vectorized computation of first reform year for each treated state
+        treated_mask = self.data["post_treatment"] == 1
+        first_reform = (
+            self.data[treated_mask]
+            .groupby("state")["year"]
+            .min()
+            .reset_index()
+            .rename(columns={"year": "first_reform_year"})
+        )
 
-        # Merge with analysis data
+        # Memory-efficient merge with categorical timing assignment
         analysis_data = analysis_data.merge(first_reform, on="state", how="left")
-        analysis_data["first_reform_year"] = analysis_data["first_reform_year"].fillna(
-            9999
-        )  # Never treated
+        analysis_data["first_reform_year"] = analysis_data["first_reform_year"].fillna(9999)
 
-        # Create reform timing categories
-        analysis_data["reform_timing"] = "Never Reformed"
-        analysis_data.loc[
-            analysis_data["first_reform_year"] <= 2017, "reform_timing"
-        ] = "Early Reformer (≤2017)"
-        analysis_data.loc[
-            (analysis_data["first_reform_year"] >= 2018)
-            & (analysis_data["first_reform_year"] <= 2020),
-            "reform_timing",
-        ] = "Mid Reformer (2018-2020)"
-        analysis_data.loc[
-            analysis_data["first_reform_year"] >= 2021, "reform_timing"
-        ] = "Late Reformer (≥2021)"
+        # Vectorized timing categorization using numpy.select for efficiency
+        conditions = [
+            analysis_data["first_reform_year"] <= 2017,
+            (analysis_data["first_reform_year"] >= 2018) & (analysis_data["first_reform_year"] <= 2020),
+            analysis_data["first_reform_year"] >= 2021
+        ]
+        
+        choices = [
+            "Early Reformer (≤2017)",
+            "Mid Reformer (2018-2020)", 
+            "Late Reformer (≥2021)"
+        ]
+        
+        analysis_data["reform_timing"] = np.select(conditions, choices, default="Never Reformed")
+        analysis_data["reform_timing"] = analysis_data["reform_timing"].astype('category')
 
         # Analyze COVID effects by reform timing group
         resilience_results = []

@@ -16,6 +16,7 @@ Date: 2025-08-12
 """
 
 # Import our existing DiD implementation
+import os
 import sys
 from pathlib import Path
 
@@ -132,33 +133,14 @@ class RobustnessTestingSuite:
 
         return {"results": jackknife_df, "summary": robustness_summary}
 
-    def specification_curve_analysis(
-        self, outcome: str = "math_grade8_gap", save_results: bool = True
-    ) -> pd.DataFrame:
-        """
-        Specification curve analysis across model variants.
-
-        Tests robustness across different combinations of:
-        - Control variables
-        - Fixed effects structures
-        - Sample restrictions
-        """
-        print(f"\nRunning specification curve analysis for {outcome}...")
-
-        if self.data.empty:
-            print("Warning: No data available")
-            return pd.DataFrame()
-
+    def _generate_spec_combinations(self):
+        """Generator for specification combinations to save memory."""
         # Define specification variants
         control_sets = [
             [],  # No controls
             ["log_total_revenue_per_pupil"],  # Basic financial controls
             ["log_total_revenue_per_pupil", "under_monitoring"],  # + monitoring
-            [
-                "log_total_revenue_per_pupil",
-                "under_monitoring",
-                "court_ordered",
-            ],  # Full controls
+            ["log_total_revenue_per_pupil", "under_monitoring", "court_ordered"],  # Full controls
         ]
 
         # Sample restrictions
@@ -167,75 +149,91 @@ class RobustnessTestingSuite:
             {"name": "post_2015", "condition": "year >= 2015"},
             {"name": "exclude_covid", "condition": "year <= 2019"},
         ]
-
-        spec_results = []
+        
         spec_counter = 0
-
-        # Test all combinations
         for controls in control_sets:
             for sample_var in sample_variants:
                 spec_counter += 1
+                yield spec_counter, controls, sample_var
 
-                # Prepare data subset
-                if sample_var["condition"]:
-                    subset_data = self.data.query(sample_var["condition"]).copy()
-                else:
-                    subset_data = self.data.copy()
+    def specification_curve_analysis(
+        self, outcome: str = "math_grade8_gap", save_results: bool = True
+    ) -> pd.DataFrame:
+        """
+        Specification curve analysis across model variants using generator pattern.
 
-                if subset_data.empty:
-                    continue
+        Tests robustness across different combinations of:
+        - Control variables
+        - Fixed effects structures  
+        - Sample restrictions
+        """
+        print(f"\nRunning specification curve analysis for {outcome}...")
 
-                print(
-                    f"  Specification {spec_counter}: {len(controls)} controls, {sample_var['name']} sample"
-                )
+        if self.data.empty:
+            print("Warning: No data available")
+            return pd.DataFrame()
 
+        spec_results = []
+        
+        # Use generator to process specifications efficiently
+        for spec_counter, controls, sample_var in self._generate_spec_combinations():
+            # Memory-efficient data subsetting
+            if sample_var["condition"]:
+                subset_data = self.data.query(sample_var["condition"]).copy()
+            else:
+                subset_data = self.data.copy()
+
+            if subset_data.empty:
+                continue
+
+            print(f"  Specification {spec_counter}: {len(controls)} controls, {sample_var['name']} sample")
+
+            try:
+                # Save subset data temporarily for estimator
+                temp_file = f"temp_spec_{spec_counter}.csv"
+                subset_data.to_csv(temp_file, index=False)
+                
                 try:
                     # Estimate with this specification
-                    estimator = StaggeredDiDAnalyzer(data=subset_data)
-                    result = estimator.estimate_group_time_effects(
-                        outcome, control_vars=controls
-                    )
+                    estimator = StaggeredDiDAnalyzer(data_path=temp_file)
+                    result = estimator.estimate_group_time_effects(outcome, control_vars=controls)
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
 
-                    if not result.empty and "simple_att" in result.columns:
-                        att_estimate = result["simple_att"].iloc[0]
-                        se_estimate = result.get("simple_se", [np.nan]).iloc[0]
+                if not result.empty and "att" in result.columns:
+                    # Vectorized computations for statistics
+                    att_estimate = result["att"].mean()
+                    se_estimate = result["se"].mean() if "se" in result.columns else np.nan
 
-                        # Calculate confidence interval
-                        ci_lower = (
-                            att_estimate - 1.96 * se_estimate
-                            if not np.isnan(se_estimate)
-                            else np.nan
-                        )
-                        ci_upper = (
-                            att_estimate + 1.96 * se_estimate
-                            if not np.isnan(se_estimate)
-                            else np.nan
-                        )
+                    # Vectorized confidence interval calculation
+                    ci_lower = att_estimate - 1.96 * se_estimate if not np.isnan(se_estimate) else np.nan
+                    ci_upper = att_estimate + 1.96 * se_estimate if not np.isnan(se_estimate) else np.nan
+                    
+                    # Vectorized significance test
+                    significant = (abs(att_estimate / se_estimate) > 1.96) if not np.isnan(se_estimate) else False
+                    
+                    # Vectorized state counting
+                    n_treated_states = (subset_data["post_treatment"] == 1).groupby(subset_data["state"]).any().sum()
 
-                        spec_results.append(
-                            {
-                                "spec_id": spec_counter,
-                                "controls": str(controls),
-                                "n_controls": len(controls),
-                                "sample_restriction": sample_var["name"],
-                                "n_obs": len(subset_data),
-                                "n_treated_states": subset_data[
-                                    subset_data["post_treatment"] == 1
-                                ]["state"].nunique(),
-                                "att_estimate": att_estimate,
-                                "standard_error": se_estimate,
-                                "ci_lower": ci_lower,
-                                "ci_upper": ci_upper,
-                                "significant_5pct": abs(att_estimate / se_estimate)
-                                > 1.96
-                                if not np.isnan(se_estimate)
-                                else False,
-                            }
-                        )
+                    spec_results.append({
+                        "spec_id": spec_counter,
+                        "controls": str(controls),
+                        "n_controls": len(controls),
+                        "sample_restriction": sample_var["name"],
+                        "n_obs": len(subset_data),
+                        "n_treated_states": n_treated_states,
+                        "att_estimate": att_estimate,
+                        "standard_error": se_estimate,
+                        "ci_lower": ci_lower,
+                        "ci_upper": ci_upper,
+                        "significant_5pct": significant,
+                    })
 
-                except Exception as e:
-                    print(f"    Error in specification {spec_counter}: {e}")
-                    continue
+            except Exception as e:
+                print(f"    Error in specification {spec_counter}: {e}")
+                continue
 
         # Convert to DataFrame
         spec_curve_df = pd.DataFrame(spec_results)
@@ -260,6 +258,49 @@ class RobustnessTestingSuite:
 
         return spec_curve_df
 
+    def _placebo_generator(self, outcome: str, n_placebo: int):
+        """Generator for memory-efficient placebo test iterations."""
+        if self.data.empty:
+            return
+            
+        # Pre-compute constants to avoid repeated calculations
+        treated_states = self.data[self.data["post_treatment"] == 1]["state"].unique()
+        available_years = [y for y in self.data["year"].unique() if 2012 <= y <= 2020]
+        all_states = self.data["state"].unique()
+        n_treated = len(treated_states)
+        
+        # Create base data template for efficiency
+        base_columns = [outcome, "state", "year", "post_treatment"]
+        base_data = self.data[base_columns].copy()
+        
+        np.random.seed(42)  # For reproducibility
+        
+        for i in range(n_placebo):
+            try:
+                # Memory-efficient placebo data creation
+                placebo_data = base_data.copy()
+                placebo_data["post_treatment"] = 0  # Reset all treatments
+                
+                # Vectorized random treatment assignment
+                placebo_treated_states = np.random.choice(
+                    all_states, size=n_treated, replace=False
+                )
+                
+                # Batch assign treatment years more efficiently
+                for state in placebo_treated_states:
+                    if available_years:
+                        treatment_year = np.random.choice(available_years)
+                        
+                        # Vectorized mask application
+                        mask = (placebo_data["state"] == state) & (placebo_data["year"] >= treatment_year)
+                        placebo_data.loc[mask, "post_treatment"] = 1
+                
+                yield i + 1, placebo_data, len(placebo_treated_states)
+                
+            except Exception as e:
+                print(f"    Error generating placebo {i + 1}: {e}")
+                yield i + 1, None, 0
+
     def placebo_tests(
         self,
         outcome: str = "math_grade8_gap",
@@ -267,7 +308,7 @@ class RobustnessTestingSuite:
         save_results: bool = True,
     ) -> dict[str, pd.DataFrame | dict]:
         """
-        Placebo tests with random treatment assignment.
+        Placebo tests with random treatment assignment using memory-efficient generator pattern.
 
         Randomly assigns treatment timing to test if we detect
         spurious effects when true effect should be zero.
@@ -278,71 +319,50 @@ class RobustnessTestingSuite:
             print("Warning: No data available")
             return {}
 
-        # Get actual treatment pattern
-        treated_states = self.data[self.data["post_treatment"] == 1]["state"].unique()
-        self.data[self.data["post_treatment"] == 1].groupby("state")["year"].min()
-
-        # Available years for placebo assignment
-        available_years = sorted(self.data["year"].unique())
-        all_states = sorted(self.data["state"].unique())
-
         placebo_results = []
-        np.random.seed(42)  # For reproducibility
-
-        for i in range(n_placebo):
-            if (i + 1) % 20 == 0:
-                print(f"  Placebo iteration {i + 1}/{n_placebo}")
-
+        
+        # Use generator for memory efficiency
+        for iteration, placebo_data, n_placebo_treated in self._placebo_generator(outcome, n_placebo):
+            if (iteration) % 20 == 0:
+                print(f"  Placebo iteration {iteration}/{n_placebo}")
+                
+            if placebo_data is None:
+                continue
+            
             try:
-                # Create placebo data
-                placebo_data = self.data.copy()
-                placebo_data["post_treatment"] = 0  # Reset treatment
+                # Save placebo data temporarily
+                temp_placebo_file = f"temp_placebo_{iteration}.csv"
+                placebo_data.to_csv(temp_placebo_file, index=False)
+                
+                try:
+                    # Estimate placebo effect efficiently
+                    placebo_estimator = StaggeredDiDAnalyzer(data_path=temp_placebo_file)
+                    result = placebo_estimator.estimate_group_time_effects(outcome)
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(temp_placebo_file):
+                        os.remove(temp_placebo_file)
 
-                # Randomly assign treatment to same number of states
-                placebo_treated_states = np.random.choice(
-                    all_states, size=len(treated_states), replace=False
-                )
-
-                # Randomly assign treatment years
-                for state in placebo_treated_states:
-                    # Random treatment year (not too early or late)
-                    possible_years = [
-                        y for y in available_years if y >= 2012 and y <= 2020
-                    ]
-                    if possible_years:
-                        treatment_year = np.random.choice(possible_years)
-
-                        # Apply placebo treatment
-                        mask = (placebo_data["state"] == state) & (
-                            placebo_data["year"] >= treatment_year
-                        )
-                        placebo_data.loc[mask, "post_treatment"] = 1
-
-                # Estimate placebo effect
-                placebo_estimator = StaggeredDiDAnalyzer(data=placebo_data)
-                result = placebo_estimator.estimate_group_time_effects(outcome)
-
-                if not result.empty and "simple_att" in result.columns:
-                    placebo_att = result["simple_att"].iloc[0]
-                    placebo_se = result.get("simple_se", [np.nan]).iloc[0]
+                if not result.empty and "att" in result.columns:
+                    placebo_att = result["att"].mean()  # Use vectorized mean
+                    placebo_se = result["se"].mean() if "se" in result.columns else np.nan
                 else:
                     placebo_att = np.nan
                     placebo_se = np.nan
 
-                placebo_results.append(
-                    {
-                        "iteration": i + 1,
-                        "placebo_att": placebo_att,
-                        "placebo_se": placebo_se,
-                        "significant_5pct": abs(placebo_att / placebo_se) > 1.96
-                        if not np.isnan(placebo_se)
-                        else False,
-                        "n_placebo_treated": len(placebo_treated_states),
-                    }
-                )
+                # Vectorized significance test
+                significant = (abs(placebo_att / placebo_se) > 1.96) if not np.isnan(placebo_se) else False
+
+                placebo_results.append({
+                    "iteration": iteration,
+                    "placebo_att": placebo_att,
+                    "placebo_se": placebo_se,
+                    "significant_5pct": significant,
+                    "n_placebo_treated": n_placebo_treated,
+                })
 
             except Exception as e:
-                print(f"    Error in placebo iteration {i + 1}: {e}")
+                print(f"    Error in placebo iteration {iteration}: {e}")
                 continue
 
         # Convert to DataFrame

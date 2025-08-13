@@ -164,16 +164,16 @@ class InstrumentalVariablesAnalyzer:
         return validation_results
 
     def _prepare_iv_data(self, outcome: str) -> pd.DataFrame:
-        """Prepare data for IV analysis."""
-        # Select complete cases for outcome and key variables
+        """Prepare data for IV analysis with memory optimization."""
+        # Vectorized selection of required variables
         required_vars = [outcome, "post_treatment", "state", "year"] + self.instruments
 
-        # Add controls if available
+        # Add controls if available - check existence once
         control_vars = ["log_total_revenue_per_pupil"]
         available_controls = [var for var in control_vars if var in self.data.columns]
         required_vars.extend(available_controls)
 
-        # Filter to complete cases
+        # Memory-efficient filtering - select columns and filter missing in one operation
         analysis_data = self.data[required_vars].dropna()
 
         print(f"  Analysis sample: {len(analysis_data)} observations")
@@ -184,47 +184,45 @@ class InstrumentalVariablesAnalyzer:
         return analysis_data
 
     def _run_first_stage(self, data: pd.DataFrame) -> dict[str, float]:
-        """Run first-stage regression to test instrument strength."""
+        """Run first-stage regression to test instrument strength with optimized computation."""
         try:
             # First-stage: regress endogenous variable on instruments + controls
             y = data["post_treatment"]
 
-            # Build instrument matrix
-            X_instruments = data[self.instruments].copy()
-
-            # Add controls
+            # Memory-efficient matrix construction
+            instrument_cols = [col for col in self.instruments if col in data.columns]
+            if not instrument_cols:
+                return {"f_statistic": np.nan, "f_pvalue": np.nan, "r_squared": np.nan, "n_obs": np.nan}
+            
+            # Build feature matrix efficiently
+            X_columns = instrument_cols.copy()
             if "log_total_revenue_per_pupil" in data.columns:
-                X_instruments = pd.concat(
-                    [X_instruments, data[["log_total_revenue_per_pupil"]]], axis=1
-                )
-
-            # Add constant
+                X_columns.append("log_total_revenue_per_pupil")
+            
+            X_instruments = data[X_columns].copy()
             X_instruments = sm.add_constant(X_instruments)
 
             # Estimate first-stage
             first_stage = sm.OLS(y, X_instruments).fit()
 
-            # Extract F-statistic for instruments
-            # F-test for joint significance of instruments
+            # Optimized F-test calculation using vectorized operations
             instrument_indices = [
-                i
-                for i, col in enumerate(X_instruments.columns)
-                if col in self.instruments
+                i for i, col in enumerate(X_instruments.columns)
+                if col in instrument_cols
             ]
 
             if len(instrument_indices) > 0:
-                f_stat, f_pvalue = (
-                    first_stage.f_test(
-                        np.eye(len(instrument_indices), X_instruments.shape[1])[
-                            :, instrument_indices
-                        ]
-                    ).fvalue,
-                    first_stage.f_test(
-                        np.eye(len(instrument_indices), X_instruments.shape[1])[
-                            :, instrument_indices
-                        ]
-                    ).pvalue,
-                )
+                # Create restriction matrix more efficiently
+                num_instruments = len(instrument_indices)
+                num_cols = X_instruments.shape[1]
+                
+                # Use sparse-like construction for restriction matrix
+                restriction_matrix = np.zeros((num_instruments, num_cols))
+                for i, idx in enumerate(instrument_indices):
+                    restriction_matrix[i, idx] = 1
+                    
+                f_test_result = first_stage.f_test(restriction_matrix)
+                f_stat, f_pvalue = f_test_result.fvalue, f_test_result.pvalue
             else:
                 f_stat, f_pvalue = np.nan, np.nan
 

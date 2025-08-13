@@ -58,29 +58,32 @@ class StaggeredDiDAnalyzer:
             raise
 
     def identify_cohorts(self) -> dict[int, list[str]]:
-        """Identify treatment cohorts by first treatment year."""
+        """Identify treatment cohorts by first treatment year using vectorized operations."""
         if self.df is None:
             raise ValueError("Data not loaded")
 
-        # Find first treatment year for each state
-        treated_data = self.df[self.df["post_treatment"] == 1].copy()
-
-        if treated_data.empty:
+        # Find first treatment year for each state - vectorized approach
+        treated_mask = self.df["post_treatment"] == 1
+        if not treated_mask.any():
             print("No treated units found")
             return {}
 
-        # Get first treatment year for each state
-        first_treatment = treated_data.groupby("state")["year"].min().reset_index()
-        first_treatment.columns = ["state", "treatment_year"]
+        # Vectorized groupby operation
+        first_treatment = (
+            self.df[treated_mask]
+            .groupby("state")["year"]
+            .min()
+            .reset_index()
+            .rename(columns={"year": "treatment_year"})
+        )
 
-        # Group states by treatment year (cohorts)
-        cohorts = {}
-        for _, row in first_treatment.iterrows():
-            year = row["treatment_year"]
-            state = row["state"]
-            if year not in cohorts:
-                cohorts[year] = []
-            cohorts[year].append(state)
+        # Group states by treatment year using vectorized operations
+        cohorts = (
+            first_treatment
+            .groupby("treatment_year")["state"]
+            .apply(list)
+            .to_dict()
+        )
 
         print(f"Treatment cohorts identified: {list(cohorts.keys())}")
         for year, states in cohorts.items():
@@ -92,7 +95,7 @@ class StaggeredDiDAnalyzer:
         self, outcome_var: str, control_vars: list[str] | None = None
     ) -> pd.DataFrame:
         """
-        Estimate group-time average treatment effects.
+        Estimate group-time average treatment effects using vectorized operations.
 
         This is the core of Callaway-Sant'Anna methodology - estimate
         treatment effects for each cohort-time combination.
@@ -119,67 +122,76 @@ class StaggeredDiDAnalyzer:
 
         # Filter to only include available control variables
         available_controls = [var for var in control_vars if var in self.df.columns]
-
+        
+        # Pre-filter data to non-missing outcomes for efficiency
+        analysis_base = self.df.dropna(subset=[outcome_var]).copy()
+        
+        # Vectorized creation of treatment indicators for all cohorts
+        all_treated_states = set().union(*cohorts.values())
+        analysis_base["ever_treated"] = analysis_base["state"].isin(all_treated_states)
+        
         group_time_results = []
-
-        for treatment_year, treated_states in cohorts.items():
-            print(f"\\nEstimating effects for {treatment_year} cohort...")
-
-            # For each post-treatment period
-            post_periods = [y for y in self.df["year"].unique() if y >= treatment_year]
-
+        
+        # Batch process cohorts more efficiently
+        cohort_items = list(cohorts.items())
+        print(f"\\nProcessing {len(cohort_items)} cohorts...")
+        
+        for treatment_year, treated_states in cohort_items:
+            # Get all post-treatment periods at once
+            post_periods = analysis_base[analysis_base["year"] >= treatment_year]["year"].unique()
+            
+            if len(post_periods) == 0:
+                continue
+                
+            print(f"  Cohort {treatment_year}: {len(post_periods)} periods")
+            
+            # Create analysis periods range more efficiently
+            analysis_periods = list(range(treatment_year - 3, treatment_year)) + list(post_periods)
+            
+            # Filter data once for this cohort
+            cohort_data = analysis_base[
+                analysis_base["year"].isin(analysis_periods)
+            ].copy()
+            
+            if cohort_data.empty:
+                continue
+            
+            # Vectorized treatment indicators
+            cohort_data["treated_group"] = cohort_data["state"].isin(treated_states)
+            
+            # Process all time periods for this cohort in batch
             for t in post_periods:
-                # Restrict to relevant time periods for this comparison
-                # Use pre-treatment periods and current period
-                analysis_periods = list(range(treatment_year - 3, treatment_year)) + [t]
-                analysis_data = self.df[self.df["year"].isin(analysis_periods)].copy()
-
-                if analysis_data.empty:
-                    continue
-
-                # Define treatment and control groups for this comparison
-                # Treated: states in current cohort
-                # Control: never treated + not-yet-treated (if available)
-                analysis_data["treated_group"] = analysis_data["state"].isin(
-                    treated_states
+                period_data = cohort_data.copy()
+                period_data["post_period"] = (period_data["year"] == t).astype(int)
+                period_data["treat_post"] = (
+                    period_data["treated_group"] * period_data["post_period"]
                 )
-                analysis_data["post_period"] = (analysis_data["year"] == t).astype(int)
-                analysis_data["treat_post"] = (
-                    analysis_data["treated_group"] * analysis_data["post_period"]
-                )
-
-                # Only include observations with non-missing outcome
-                analysis_data = analysis_data.dropna(subset=[outcome_var])
-
-                if len(analysis_data) < 10:  # Skip if too few observations
+                
+                if len(period_data) < 10:  # Skip if too few observations
                     continue
-
+                
                 try:
-                    # Estimate DiD regression
-                    formula_parts = [
-                        outcome_var,
-                        "treated_group + post_period + treat_post",
-                    ]
-
-                    # Add available controls
+                    # More efficient formula construction
+                    base_formula = f"{outcome_var} ~ treated_group + post_period + treat_post"
+                    
                     if available_controls:
-                        formula_parts[1] += " + " + " + ".join(available_controls)
-
-                    # Add state fixed effects (if enough variation)
-                    if len(analysis_data["state"].unique()) > 2:
-                        formula_parts[1] += " + C(state)"
-
-                    formula = " ~ ".join(formula_parts)
-
+                        base_formula += " + " + " + ".join(available_controls)
+                    
+                    if period_data["state"].nunique() > 2:
+                        base_formula += " + C(state)"
+                    
                     # Estimate regression
-                    model = ols(formula, data=analysis_data).fit()
-
+                    model = ols(base_formula, data=period_data).fit()
+                    
                     # Extract DiD coefficient
                     did_coef = model.params.get("treat_post", np.nan)
                     did_se = model.bse.get("treat_post", np.nan)
                     did_pval = model.pvalues.get("treat_post", np.nan)
-
-                    # Store results
+                    
+                    # Store results with vectorized counts
+                    n_treated = (period_data["treated_group"] == True).sum()
+                    n_control = (period_data["treated_group"] == False).sum()
+                    
                     result = {
                         "cohort": treatment_year,
                         "time": t,
@@ -187,54 +199,65 @@ class StaggeredDiDAnalyzer:
                         "att": did_coef,
                         "se": did_se,
                         "pvalue": did_pval,
-                        "n_obs": len(analysis_data),
-                        "n_treated": len(
-                            analysis_data[analysis_data["treated_group"] == True]
-                        ),
-                        "n_control": len(
-                            analysis_data[analysis_data["treated_group"] == False]
-                        ),
+                        "n_obs": len(period_data),
+                        "n_treated": n_treated,
+                        "n_control": n_control,
                     }
-
+                    
                     group_time_results.append(result)
-
+                    
                 except Exception as e:
-                    print(
-                        f"Error estimating for cohort {treatment_year}, time {t}: {e}"
-                    )
+                    print(f"    Error for time {t}: {e}")
                     continue
 
         results_df = pd.DataFrame(group_time_results)
-
+        
         if not results_df.empty:
             print(f"\\nEstimated {len(results_df)} group-time effects")
             print(f"Average ATT: {results_df['att'].mean():.3f}")
             print(
                 f"Significant effects: {(results_df['pvalue'] < 0.05).sum()}/{len(results_df)}"
             )
-
+        
         return results_df
 
     def aggregate_treatment_effects(
         self, group_time_df: pd.DataFrame
     ) -> dict[str, float]:
-        """Aggregate group-time effects to overall treatment effects."""
+        """Aggregate group-time effects to overall treatment effects using vectorized operations."""
 
         if group_time_df.empty:
             return {}
 
-        # Simple average (equal weighting)
-        simple_att = group_time_df["att"].mean()
-        simple_se = group_time_df["se"].mean() / np.sqrt(len(group_time_df))
+        # Filter out invalid estimates for aggregation
+        valid_results = group_time_df.dropna(subset=["att", "se"])
+        if valid_results.empty:
+            return {}
+            
+        # Vectorized calculations
+        att_values = valid_results["att"].values
+        se_values = valid_results["se"].values
+        
+        # Simple average (equal weighting) - vectorized
+        simple_att = np.mean(att_values)
+        simple_se = np.mean(se_values) / np.sqrt(len(att_values))
 
-        # Inverse variance weighted average
-        weights = 1 / (group_time_df["se"] ** 2)
-        weighted_att = np.sum(weights * group_time_df["att"]) / np.sum(weights)
-        weighted_se = np.sqrt(1 / np.sum(weights))
+        # Inverse variance weighted average - vectorized
+        with np.errstate(divide='ignore', invalid='ignore'):
+            weights = 1 / (se_values ** 2)
+            weights = weights[np.isfinite(weights)]  # Remove inf/nan weights
+            att_finite = att_values[np.isfinite(1 / (se_values ** 2))]
+            
+            if len(weights) > 0:
+                weighted_att = np.sum(weights * att_finite) / np.sum(weights)
+                weighted_se = np.sqrt(1 / np.sum(weights))
+            else:
+                weighted_att = simple_att
+                weighted_se = simple_se
 
-        # Aggregate by relative time
+        # Aggregate by relative time using optimized groupby
         relative_time_effects = (
-            group_time_df.groupby("time_relative")
+            valid_results.groupby("time_relative")
             .agg(
                 {
                     "att": "mean",
@@ -253,8 +276,8 @@ class StaggeredDiDAnalyzer:
             "weighted_att": weighted_att,
             "weighted_se": weighted_se,
             "relative_time_effects": relative_time_effects,
-            "n_cohorts": group_time_df["cohort"].nunique(),
-            "n_group_time": len(group_time_df),
+            "n_cohorts": valid_results["cohort"].nunique(),
+            "n_group_time": len(valid_results),
         }
 
         return aggregated
