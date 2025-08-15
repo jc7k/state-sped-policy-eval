@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Robustness Analysis Results}
+\label{tab:robustness}
+\begin{tabular}{lcccc}
+\toprule
+Outcome & LOSO Range & Alt. Clustering & Permutation p & Spec. Curve \\
+\midrule
+math\_grade4\_swd\_score & -- & [1.292, 1.292] & 0.880 & -- \\
+math\_grade4\_non\_swd\_score & -- & [0.729, 0.729] & 0.490 & -- \\
+math\_grade4\_gap & -- & [1.097, 1.097] & 0.554 & -- \\
+\bottomrule
+\end{tabular}
+\footnotesize
+\textit{Notes:} LOSO = Leave-One-State-Out coefficient range.
+Alt. Clustering shows range of standard errors across clustering methods.
+Permutation p shows p-value from permutation test.
+Spec. Curve shows coefficient range across specifications.
+\end{table}
