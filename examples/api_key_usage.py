@@ -8,9 +8,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-from code.collection.naep_collector import NAEPDataCollector  
-from code.collection.census_collector import CensusEducationFinance
-from code.config import get_config, validate_environment
+from src.collection.naep_collector import NAEPDataCollector  
+from src.collection.census_collector import CensusEducationFinance
+from src.config import get_config, validate_environment
 
 def main():
     """
@@ -139,8 +139,8 @@ def main():
     if not collectors_failed:
         print("🎉 All collectors ready! You can now run data collection.")
         print("\nTry running:")
-        print("  python -m code.collection.naep_collector")
-        print("  python -m code.collection.census_collector")
+        print("  python -m src.collection.naep_collector")
+        print("  python -m src.collection.census_collector")
     else:
         print("📋 Fix the failed collectors above, then you're ready to go!")
         
