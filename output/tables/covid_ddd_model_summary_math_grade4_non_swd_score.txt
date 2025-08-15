@@ -4,7 +4,7 @@ Dep. Variable:     math_grade4_non_swd_score   R-squared:                       
 Model:                                   OLS   Adj. R-squared:                  0.878
 Method:                        Least Squares   F-statistic:                 4.846e+05
 Date:                       Fri, 15 Aug 2025   Prob (F-statistic):          8.24e-242
-Time:                               08:18:33   Log-Likelihood:                -277.16
+Time:                               13:16:15   Log-Likelihood:                -277.16
 No. Observations:                        150   AIC:                             662.3
 Df Residuals:                             96   BIC:                             824.9
 Df Model:                                 53                                         

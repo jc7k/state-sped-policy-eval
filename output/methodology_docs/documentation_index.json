@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-08-15T14:09:53.372355",
+  "method_guides": {
+    "cluster_robust_se": "output/methodology_docs/cluster_robust_se_guide.md",
+    "wild_cluster_bootstrap": "output/methodology_docs/wild_cluster_bootstrap_guide.md",
+    "cluster_bootstrap": "output/methodology_docs/cluster_bootstrap_guide.md",
+    "permutation_test": "output/methodology_docs/permutation_test_guide.md"
+  },
+  "best_practices": "output/methodology_docs/best_practices_guide.md",
+  "troubleshooting": "output/methodology_docs/troubleshooting_guide.md",
+  "summary": "output/methodology_docs/documentation_summary.md"
+}

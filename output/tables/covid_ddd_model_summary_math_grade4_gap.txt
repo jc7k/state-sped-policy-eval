@@ -4,7 +4,7 @@ Dep. Variable:        math_grade4_gap   R-squared:                       0.752
 Model:                            OLS   Adj. R-squared:                  0.615
 Method:                 Least Squares   F-statistic:                 1.182e+04
 Date:                Fri, 15 Aug 2025   Prob (F-statistic):          2.11e-164
-Time:                        08:18:33   Log-Likelihood:                -344.86
+Time:                        13:16:15   Log-Likelihood:                -344.86
 No. Observations:                 150   AIC:                             797.7
 Df Residuals:                      96   BIC:                             960.3
 Df Model:                          53                                         

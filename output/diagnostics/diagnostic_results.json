@@ -1,0 +1,430 @@
+{
+  "data_adequacy": {
+    "timestamp": "2025-08-15T14:04:39.650368",
+    "sample_size": {
+      "total_observations": 765,
+      "states": 51,
+      "years": 15,
+      "treated_states": 16,
+      "control_states": 51,
+      "adequacy_checks": {
+        "total_obs_adequate": true,
+        "states_adequate": true,
+        "years_adequate": true,
+        "treated_adequate": true,
+        "control_adequate": true
+      },
+      "recommendations": []
+    },
+    "coverage": {
+      "temporal": {
+        "years_covered": [
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "observations_per_year": {
+          "2009": 51,
+          "2010": 51,
+          "2011": 51,
+          "2012": 51,
+          "2013": 51,
+          "2014": 51,
+          "2015": 51,
+          "2016": 51,
+          "2017": 51,
+          "2018": 51,
+          "2019": 51,
+          "2020": 51,
+          "2021": 51,
+          "2022": 51,
+          "2023": 51
+        },
+        "missing_years": [],
+        "unbalanced_years": []
+      },
+      "geographic": {
+        "states_covered": 51,
+        "observations_per_state": {
+          "AL": 15,
+          "AK": 15,
+          "AZ": 15,
+          "AR": 15,
+          "CA": 15,
+          "CO": 15,
+          "CT": 15,
+          "DE": 15,
+          "DC": 15,
+          "FL": 15,
+          "GA": 15,
+          "HI": 15,
+          "ID": 15,
+          "IL": 15,
+          "IN": 15,
+          "IA": 15,
+          "KS": 15,
+          "KY": 15,
+          "LA": 15,
+          "ME": 15,
+          "MD": 15,
+          "MA": 15,
+          "MI": 15,
+          "MN": 15,
+          "MS": 15,
+          "MO": 15,
+          "MT": 15,
+          "NE": 15,
+          "NV": 15,
+          "NH": 15,
+          "NJ": 15,
+          "NM": 15,
+          "NY": 15,
+          "NC": 15,
+          "ND": 15,
+          "OH": 15,
+          "OK": 15,
+          "OR": 15,
+          "PA": 15,
+          "RI": 15,
+          "SC": 15,
+          "SD": 15,
+          "TN": 15,
+          "TX": 15,
+          "UT": 15,
+          "VT": 15,
+          "VA": 15,
+          "WA": 15,
+          "WV": 15,
+          "WI": 15,
+          "WY": 15
+        },
+        "missing_states": [],
+        "unbalanced_states": []
+      },
+      "outcome": {
+        "math_grade4_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "math_grade4_non_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "math_grade4_gap": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "math_grade8_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "math_grade8_non_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "math_grade8_gap": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade4_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade4_non_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade4_gap": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade8_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade8_non_swd_score": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        },
+        "reading_grade8_gap": {
+          "missing_percentage": 0.803921568627451,
+          "missing_count": "615",
+          "adequate": "True",
+          "is_naep_variable": true,
+          "assessment_note": "NAEP variable - expected ~80.0% missing"
+        }
+      },
+      "missing_data": {
+        "total_missing_cells": "16479",
+        "missing_percentage": 0.40643729189789124,
+        "variables_with_missing": [
+          "years_since_treatment",
+          "math_grade4_swd_score",
+          "math_grade4_non_swd_score",
+          "math_grade4_gap",
+          "math_grade8_swd_score",
+          "math_grade8_non_swd_score",
+          "math_grade8_gap",
+          "reading_grade4_swd_score",
+          "reading_grade4_non_swd_score",
+          "reading_grade4_gap",
+          "reading_grade8_swd_score",
+          "reading_grade8_non_swd_score",
+          "reading_grade8_gap",
+          "total_revenue",
+          "federal_revenue",
+          "state_revenue",
+          "local_revenue",
+          "total_expenditure",
+          "instruction_expenditure",
+          "support_services_expenditure",
+          "total_revenue_per_pupil",
+          "federal_revenue_per_pupil",
+          "state_revenue_per_pupil",
+          "local_revenue_per_pupil",
+          "total_expenditure_per_pupil",
+          "instruction_expenditure_per_pupil",
+          "support_services_expenditure_per_pupil"
+        ],
+        "naep_adjusted_concerns": []
+      },
+      "naep_pattern_analysis": {
+        "naep_variables": [
+          "math_grade4_swd_score",
+          "math_grade4_non_swd_score",
+          "math_grade4_gap",
+          "math_grade8_swd_score",
+          "math_grade8_non_swd_score",
+          "math_grade8_gap",
+          "reading_grade4_swd_score",
+          "reading_grade4_non_swd_score",
+          "reading_grade4_gap",
+          "reading_grade8_swd_score",
+          "reading_grade8_non_swd_score",
+          "reading_grade8_gap"
+        ],
+        "expected_naep_years": [
+          2017,
+          2019,
+          2022
+        ],
+        "available_naep_years": [
+          2017,
+          2019,
+          2022
+        ],
+        "expected_missing_rate": 0.8,
+        "naep_observations_available": {
+          "2017": 51,
+          "2019": 51,
+          "2022": 51
+        }
+      }
+    },
+    "balance": {
+      "pre_treatment_balance": {},
+      "balance_tests": {},
+      "standardized_differences": {},
+      "overall_balance": "good"
+    },
+    "power": {
+      "power_calculations": {},
+      "minimum_detectable_effects": {},
+      "sample_size_recommendations": {},
+      "overall_power": "adequate"
+    },
+    "recommendations": [],
+    "overall_assessment": "adequate"
+  },
+  "assumption_tests": {
+    "parallel_trends": {
+      "pre_treatment_trends": {},
+      "joint_test_results": {},
+      "placebo_tests": {},
+      "overall_assessment": "satisfied"
+    },
+    "no_anticipation": {
+      "immediate_leads": {},
+      "announcement_effects": {},
+      "overall_assessment": "satisfied"
+    },
+    "random_treatment": {},
+    "stable_unit_treatment": {},
+    "clustering_assumptions": {
+      "cluster_sizes": {
+        "n_clusters": 51,
+        "min_cluster_size": "15",
+        "max_cluster_size": "15",
+        "mean_cluster_size": 15.0,
+        "adequate_n_clusters": true
+      },
+      "within_cluster_correlation": {},
+      "minimum_clusters": {},
+      "recommendations": []
+    },
+    "overall_validity": "valid"
+  },
+  "method_failures": {
+    "bootstrap_failures": {
+      "common_failures": [
+        "Insufficient bootstrap samples converging",
+        "Extreme bootstrap distribution",
+        "Memory limitations with large datasets",
+        "Clustering structure not preserved"
+      ],
+      "diagnostic_checks": {
+        "sample_size_adequate": true,
+        "clusters_adequate": true,
+        "variance_finite": true
+      },
+      "solutions": {
+        "insufficient_convergence": "Increase bootstrap iterations to 2000+",
+        "extreme_distribution": "Use bias-corrected bootstrap (BCa)",
+        "memory_issues": "Use stratified bootstrap or reduce sample size",
+        "clustering_issues": "Ensure state-level resampling preserves structure"
+      }
+    },
+    "iv_failures": {
+      "common_failures": [
+        "Weak instruments (low F-statistic)",
+        "Perfect collinearity in instruments",
+        "Insufficient variation in instrument",
+        "Endogeneity tests fail"
+      ],
+      "diagnostic_checks": {
+        "first_stage_f": 3075.3588775875296,
+        "instrument_strong": "True",
+        "r_squared": 0.9993929844472245
+      },
+      "solutions": {
+        "weak_instruments": "Find stronger instruments or use limited information methods",
+        "collinearity": "Check instrument correlation matrix and remove redundant IVs",
+        "insufficient_variation": "Expand sample or find alternative instruments",
+        "endogeneity_fails": "Use alternative identification strategy"
+      }
+    },
+    "clustering_failures": {
+      "common_failures": [
+        "Too few clusters for asymptotic theory",
+        "Unbalanced cluster sizes",
+        "Within-cluster correlation too high",
+        "Clustering variable has missing values"
+      ],
+      "diagnostic_checks": {
+        "n_clusters": 51,
+        "min_cluster_size": "15",
+        "max_cluster_size": "15",
+        "missing_clusters": "0"
+      },
+      "solutions": {
+        "few_clusters": "Use wild cluster bootstrap or randomization inference",
+        "unbalanced_sizes": "Consider weighted clustering or bootstrap",
+        "high_correlation": "Use conservative inference methods",
+        "missing_clusters": "Assign missing observations or drop incomplete clusters"
+      }
+    },
+    "convergence_issues": {},
+    "troubleshooting_guide": {
+      "convergence_issues": {
+        "symptoms": [
+          "Model fails to converge",
+          "Unrealistic coefficient estimates"
+        ],
+        "causes": [
+          "Perfect collinearity",
+          "Insufficient variation",
+          "Numerical precision"
+        ],
+        "solutions": [
+          "Check correlation matrix",
+          "Add regularization",
+          "Scale variables"
+        ]
+      },
+      "inference_failures": {
+        "symptoms": [
+          "Standard errors are NaN",
+          "Confidence intervals explode"
+        ],
+        "causes": [
+          "Rank deficient covariance matrix",
+          "Too few clusters"
+        ],
+        "solutions": [
+          "Use robust inference",
+          "Increase sample size",
+          "Alternative clustering"
+        ]
+      },
+      "specification_issues": {
+        "symptoms": [
+          "Residuals show patterns",
+          "Assumption tests fail"
+        ],
+        "causes": [
+          "Omitted variables",
+          "Functional form misspecification"
+        ],
+        "solutions": [
+          "Add controls",
+          "Test non-linear terms",
+          "Consider alternative specifications"
+        ]
+      }
+    },
+    "recommended_alternatives": {
+      "primary_methods": [
+        "Cluster robust standard errors",
+        "Bootstrap inference",
+        "Wild cluster bootstrap"
+      ],
+      "fallback_methods": [],
+      "not_recommended": []
+    }
+  }
+}

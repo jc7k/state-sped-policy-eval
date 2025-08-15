@@ -58,47 +58,84 @@ class PanelDataCreator(ErrorHandlingMixin):
 
     def aggregate_naep_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Aggregate NAEP data to state-year level.
+        Aggregate NAEP data to state-year level with properly named variables.
 
         NAEP has multiple observations per state-year (subject/grade combinations).
-        We aggregate by taking the mean across subjects and grades.
+        We create separate variables for each subject-grade-type combination.
 
         Args:
             df: Raw NAEP data
 
         Returns:
-            Aggregated NAEP data at state-year level
+            Aggregated NAEP data at state-year level with descriptive variable names
         """
         if df.empty:
             self.log_warning("NAEP data is empty")
             return pd.DataFrame()
 
         # Validate required columns
-        required_cols = ["state", "year"]
+        required_cols = ["state", "year", "subject", "grade"]
         if not all(col in df.columns for col in required_cols):
             self.log_error(f"NAEP data missing required columns: {required_cols}")
             return pd.DataFrame()
 
-        # Find numeric columns to aggregate
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        exclude_cols = ["state", "year"]
-        agg_cols = [col for col in numeric_cols if col not in exclude_cols]
-
-        if not agg_cols:
-            self.log_warning("No numeric columns found in NAEP data for aggregation")
+        # Check for score columns
+        score_cols = ['swd_mean_score', 'non_swd_mean_score', 'achievement_gap']
+        available_score_cols = [col for col in score_cols if col in df.columns]
+        
+        if not available_score_cols:
+            self.log_warning("No score columns found in NAEP data")
             return df[required_cols].drop_duplicates()
 
-        # Aggregate by mean (appropriate for scale scores and percentages)
-        agg_dict = dict.fromkeys(agg_cols, "mean")
-        naep_agg = df.groupby(required_cols).agg(agg_dict).reset_index()
-
-        # Add NAEP prefix to avoid column conflicts
-        naep_cols = {col: f"naep_{col}" for col in naep_agg.columns if col not in required_cols}
-        naep_agg = naep_agg.rename(columns=naep_cols)
+        # Create wide format with descriptive variable names
+        # Transform from long format (subject/grade rows) to wide format (subject_grade columns)
+        result_data = []
+        
+        # Get all state-year combinations
+        state_years = df[['state', 'year']].drop_duplicates()
+        
+        for _, row in state_years.iterrows():
+            state, year = row['state'], row['year']
+            record = {'state': state, 'year': year}
+            
+            # Get data for this state-year
+            state_year_data = df[(df['state'] == state) & (df['year'] == year)]
+            
+            # Create variables for each subject-grade combination
+            for _, naep_row in state_year_data.iterrows():
+                subject = naep_row['subject']
+                grade = naep_row['grade']
+                
+                # Create variable name prefixes
+                subject_prefix = subject.lower()
+                grade_suffix = f"grade{grade}"
+                
+                # Add SWD score
+                if 'swd_mean_score' in naep_row and pd.notna(naep_row['swd_mean_score']):
+                    var_name = f"{subject_prefix}_{grade_suffix}_swd_score"
+                    record[var_name] = naep_row['swd_mean_score']
+                
+                # Add non-SWD score
+                if 'non_swd_mean_score' in naep_row and pd.notna(naep_row['non_swd_mean_score']):
+                    var_name = f"{subject_prefix}_{grade_suffix}_non_swd_score"
+                    record[var_name] = naep_row['non_swd_mean_score']
+                
+                # Add achievement gap
+                if 'achievement_gap' in naep_row and pd.notna(naep_row['achievement_gap']):
+                    var_name = f"{subject_prefix}_{grade_suffix}_gap"
+                    record[var_name] = naep_row['achievement_gap']
+            
+            result_data.append(record)
+        
+        naep_agg = pd.DataFrame(result_data)
 
         self.log_info(
             f"Aggregated NAEP data: {len(df)} records → {len(naep_agg)} state-year observations"
         )
+        
+        # Log the variables created
+        naep_vars = [col for col in naep_agg.columns if col not in ['state', 'year']]
+        self.log_info(f"NAEP variables created: {naep_vars}")
 
         return naep_agg
 

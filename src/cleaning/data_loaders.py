@@ -43,7 +43,7 @@ class NAEPDataLoader(FileBasedLoader):
         return self.load_csv_file(main_file)
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Clean and standardize NAEP data."""
+        """Clean and standardize NAEP data with proper SWD/non-SWD handling."""
         if df.empty:
             return df
 
@@ -53,23 +53,49 @@ class NAEPDataLoader(FileBasedLoader):
         # Convert year to integer
         df_clean = DataCleaningUtils.safe_numeric_conversion(df_clean, ["year"])
 
-        # Define key NAEP variables
-        naep_vars = [
-            "state",
-            "year",
-            "subject",
-            "grade",
-            "avg_scale_score",
-            "pct_below_basic",
-            "pct_basic",
-            "pct_proficient",
-            "pct_advanced",
-        ]
-
-        # Keep only available key variables
-        available_vars = [var for var in naep_vars if var in df_clean.columns]
-        df_clean = df_clean[available_vars].copy()
-
+        # Handle disability status properly
+        # Raw data has disability_status: "SWD", "non-SWD"
+        if 'disability_status' in df_clean.columns and 'mean_score' in df_clean.columns:
+            # Create wide format with separate SWD and non-SWD scores
+            result_records = []
+            
+            # Group by state, year, subject, grade to pivot SWD/non-SWD data
+            for group_keys, group_data in df_clean.groupby(['state', 'year', 'subject', 'grade']):
+                state, year, subject, grade = group_keys
+                
+                base_record = {
+                    'state': state,
+                    'year': year, 
+                    'subject': subject,
+                    'grade': grade
+                }
+                
+                # Get SWD score
+                swd_rows = group_data[group_data['disability_status'] == 'SWD']
+                if not swd_rows.empty:
+                    base_record['swd_mean_score'] = swd_rows['mean_score'].iloc[0]
+                else:
+                    base_record['swd_mean_score'] = None
+                
+                # Get non-SWD score  
+                non_swd_rows = group_data[group_data['disability_status'] == 'non-SWD']
+                if not non_swd_rows.empty:
+                    base_record['non_swd_mean_score'] = non_swd_rows['mean_score'].iloc[0]
+                else:
+                    base_record['non_swd_mean_score'] = None
+                
+                # Calculate achievement gap (non-SWD - SWD, so positive = gap against SWD)
+                if (base_record['swd_mean_score'] is not None and 
+                    base_record['non_swd_mean_score'] is not None):
+                    base_record['achievement_gap'] = (base_record['non_swd_mean_score'] - 
+                                                    base_record['swd_mean_score'])
+                else:
+                    base_record['achievement_gap'] = None
+                
+                result_records.append(base_record)
+            
+            df_clean = pd.DataFrame(result_records)
+        
         # Remove rows with missing key data
         df_clean = df_clean.dropna(subset=["state", "year"])
 

@@ -1,0 +1,119 @@
+{
+  "timestamp": "2025-08-15T14:07:00.854859",
+  "data_summary": {
+    "sample_size": 765,
+    "n_clusters": 51,
+    "treatment_variation": 0.10692947336002463
+  },
+  "primary_recommendation": {
+    "method": "cluster_robust_se",
+    "score": 100.0,
+    "rationale": "Overall score: 100.0/100. Reliability: 85.0/100"
+  },
+  "alternative_methods": [
+    {
+      "method": "wild_cluster_bootstrap",
+      "score": 97.20000000000002,
+      "rationale": "Overall score: 97.2/100. Reliability: 92.0/100"
+    },
+    {
+      "method": "permutation_test",
+      "score": 96.0,
+      "rationale": "Overall score: 96.0/100. Reliability: 95.0/100"
+    }
+  ],
+  "method_comparison": {
+    "methods": [
+      {
+        "method_name": "cluster_robust_se",
+        "overall_score": 100.0,
+        "reliability": 85.0,
+        "suitability": 115.0,
+        "computational_cost": "low",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      },
+      {
+        "method_name": "wild_cluster_bootstrap",
+        "overall_score": 97.20000000000002,
+        "reliability": 92.0,
+        "suitability": 111.0,
+        "computational_cost": "medium",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      },
+      {
+        "method_name": "permutation_test",
+        "overall_score": 96.0,
+        "reliability": 95.0,
+        "suitability": 95.0,
+        "computational_cost": "high",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      },
+      {
+        "method_name": "randomization_inference",
+        "overall_score": 95.2,
+        "reliability": 93.0,
+        "suitability": 95.0,
+        "computational_cost": "high",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      },
+      {
+        "method_name": "jackknife_inference",
+        "overall_score": 93.2,
+        "reliability": 83.0,
+        "suitability": 100.0,
+        "computational_cost": "low",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      },
+      {
+        "method_name": "cluster_bootstrap",
+        "overall_score": 91.2,
+        "reliability": 88.0,
+        "suitability": 100.0,
+        "computational_cost": "medium",
+        "recommendation": "Strongly Recommended",
+        "concerns": []
+      }
+    ],
+    "criteria": [
+      "Overall Score",
+      "Reliability",
+      "Data Suitability",
+      "Computational Cost",
+      "Recommendation"
+    ]
+  },
+  "specific_guidance": {
+    "clustering": "Sufficient clusters for standard methods. Cluster robust standard errors should perform well."
+  },
+  "implementation_notes": {
+    "cluster_robust_se": [
+      "Computational cost: low",
+      "Minimum sample size: 200",
+      "Minimum clusters: 30",
+      "Ensure degrees of freedom correction",
+      "Use HC1 or HC2 finite sample corrections",
+      "Check for sufficient within-cluster variation"
+    ],
+    "wild_cluster_bootstrap": [
+      "Computational cost: medium",
+      "Minimum sample size: 100",
+      "Minimum clusters: 10",
+      "Use Rademacher weights for best performance",
+      "Bootstrap iterations: 999 or 1999 (odd numbers)",
+      "Cluster at state level for policy analysis"
+    ],
+    "permutation_test": [
+      "Computational cost: high",
+      "Minimum sample size: 50",
+      "Minimum clusters: 5",
+      "Requires careful null hypothesis specification",
+      "Use at least 999 permutations",
+      "Consider computational time for large datasets"
+    ]
+  }
+}
