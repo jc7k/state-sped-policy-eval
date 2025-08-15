@@ -5,6 +5,7 @@ Implements NAEP API integration per data-collection-prd.md Section 2
 """
 
 import os
+from typing import Any
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -113,6 +114,117 @@ class NAEPDataCollector(APIBasedCollector):
         self.logger.info(f"NAEP collection completed: {len(df)} records collected")
 
         return df
+
+    def fetch_data_streaming(
+        self,
+        years: list[int],
+        grades: list[int] | None = None,
+        subjects: list[str] | None = None,
+        output_file: str | None = None,
+        chunk_size: int = 1000,
+        batch_size: int = 50
+    ) -> dict[str, Any]:
+        """
+        Fetch NAEP data using streaming to minimize memory usage.
+
+        Args:
+            years: List of assessment years to collect
+            grades: List of grade levels (4, 8)
+            subjects: List of subjects ('mathematics', 'reading')
+            output_file: Optional CSV file to stream results to
+            chunk_size: Records per processing chunk
+            batch_size: API requests per batch
+
+        Returns:
+            Collection statistics dictionary
+        """
+        if grades is None:
+            grades = [4, 8]
+        if subjects is None:
+            subjects = ["mathematics", "reading"]
+
+        # Import streaming classes
+        from .common import BatchDataCollector, ResponseParserFactory
+
+        # Get all state codes from StateUtils
+        state_codes = self.state_utils.get_all_states()
+
+        self.logger.info(
+            f"Starting NAEP streaming collection: {len(years)} years, {len(grades)} grades, "
+            f"{len(subjects)} subjects, {len(state_codes)} states"
+        )
+
+        # Generate request configurations
+        request_configs = []
+        for year in years:
+            for grade in grades:
+                for subject in subjects:
+                    for state_code in state_codes:
+                        params = {
+                            "type": "data",
+                            "subject": subject,
+                            "grade": grade,
+                            "year": year,
+                            "jurisdiction": state_code,
+                            "variable": "IEP",  # Disability status variable
+                            "stattype": "MN:MN",  # Mean scores only
+                        }
+                        
+                        request_configs.append({
+                            'url': self.base_url,
+                            'params': params,
+                            'context': {
+                                'year': year,
+                                'grade': grade,
+                                'subject': subject,
+                                'state': state_code
+                            }
+                        })
+
+        total_requests = len(request_configs)
+        self.logger.info(f"Generated {total_requests} API request configurations")
+
+        # Create parser for NAEP responses
+        parser = ResponseParserFactory.create_parser('naep', self.state_utils)
+
+        # Create batch collector with streaming
+        collector = BatchDataCollector(
+            api_client=self.api_client,
+            parser=parser,
+            state_utils=self.state_utils,
+            batch_size=batch_size,
+            chunk_size=chunk_size
+        )
+
+        if output_file:
+            # Stream directly to file
+            stats = collector.collect_to_file(request_configs, output_file)
+            self.logger.info(f"NAEP streaming collection completed: {stats}")
+            return stats
+        else:
+            # Stream process and collect in memory (still chunked)
+            total_records = 0
+            all_records = []
+            
+            for chunk in collector.collect_with_streaming(request_configs):
+                all_records.extend(chunk)
+                total_records += len(chunk)
+                
+                # Log progress
+                if total_records % 1000 == 0:
+                    self.logger.info(f"Collected {total_records} records so far...")
+
+            # Convert to DataFrame for compatibility
+            df = pd.DataFrame(all_records)
+            self.results = all_records  # Update internal results
+            
+            self.logger.info(f"NAEP streaming collection completed: {len(df)} records")
+            
+            return {
+                'total_records': len(df),
+                'total_requests': total_requests,
+                'dataframe': df
+            }
 
     def _parse_state_record(
         self, state_data: dict, year: int, grade: int, subject: str

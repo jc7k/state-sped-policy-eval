@@ -6,12 +6,17 @@ Shared functionality to eliminate code duplication across data collectors.
 Includes state mappings, API client patterns, validation logic, and file utilities.
 """
 
+import csv
+import json
 import logging
 import os
 import time
 from abc import ABC, abstractmethod
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import pandas as pd
 import requests
@@ -768,6 +773,1336 @@ class ErrorReporter:
             recommendations.append("Data quality issues detected - consider data source validation")
         
         return recommendations
+
+class StreamingDataProcessor:
+    """
+    Streaming data processor to reduce memory usage during collection.
+    
+    Processes data in chunks and streams results to avoid loading
+    entire datasets into memory at once.
+    """
+    
+    def __init__(
+        self, 
+        chunk_size: int = 1000,
+        output_file: Optional[str] = None,
+        state_utils: Optional[StateUtils] = None
+    ):
+        """
+        Initialize streaming processor.
+        
+        Args:
+            chunk_size: Number of records to process at once
+            output_file: Optional file to stream results to
+            state_utils: StateUtils instance for validation
+        """
+        self.chunk_size = chunk_size
+        self.output_file = output_file
+        self.state_utils = state_utils or StateUtils()
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.error_reporter = ErrorReporter(self.logger)
+        
+        # Processing statistics
+        self.total_processed = 0
+        self.total_chunks = 0
+        self.successful_records = 0
+        self.failed_records = 0
+        
+        # File handle for streaming output
+        self._output_handle = None
+        self._csv_writer = None
+        self._headers_written = False
+    
+    def __enter__(self):
+        """Context manager entry - open output file if specified."""
+        if self.output_file:
+            self._output_handle = open(self.output_file, 'w', newline='', encoding='utf-8')
+            import csv
+            self._csv_writer = csv.DictWriter(self._output_handle, fieldnames=[])
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - close output file."""
+        if self._output_handle:
+            self._output_handle.close()
+    
+    def process_api_responses_stream(
+        self, 
+        api_responses: Iterator[Tuple[Dict[str, Any], Dict[str, Any]]], 
+        parser: 'BaseAPIResponseParser'
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Stream process API responses in chunks.
+        
+        Args:
+            api_responses: Iterator of (response_data, context) tuples
+            parser: Response parser to use
+            
+        Yields:
+            Lists of processed records (chunks)
+        """
+        current_chunk = []
+        
+        for response_data, context in api_responses:
+            try:
+                # Parse individual response
+                records = parser.parse_response(response_data, **context)
+                
+                for record in records:
+                    current_chunk.append(record)
+                    self.successful_records += 1
+                    
+                    # Yield chunk when it reaches target size
+                    if len(current_chunk) >= self.chunk_size:
+                        yield self._process_chunk(current_chunk)
+                        current_chunk = []
+                        self.total_chunks += 1
+                        
+            except Exception as e:
+                self.failed_records += 1
+                self.error_reporter.report_parsing_error(
+                    parser_type=parser.__class__.__name__,
+                    message=f"Failed to parse API response: {str(e)}",
+                    raw_data=response_data,
+                    state=context.get('state'),
+                    year=context.get('year')
+                )
+                continue
+        
+        # Yield remaining records in final chunk
+        if current_chunk:
+            yield self._process_chunk(current_chunk)
+            self.total_chunks += 1
+    
+    def _process_chunk(self, chunk: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Process a chunk of records with validation and cleaning.
+        
+        Args:
+            chunk: List of raw records
+            
+        Returns:
+            List of processed and validated records
+        """
+        processed_chunk = []
+        
+        for record in chunk:
+            try:
+                # Basic validation and cleaning
+                cleaned_record = self._clean_record(record)
+                if cleaned_record:
+                    processed_chunk.append(cleaned_record)
+                    
+                    # Stream to output file if configured
+                    if self._csv_writer and cleaned_record:
+                        self._write_record_to_stream(cleaned_record)
+                        
+            except Exception as e:
+                self.failed_records += 1
+                self.error_reporter.report_data_validation_error(
+                    validation_type='record_processing',
+                    message=f"Failed to process record: {str(e)}",
+                    data_context={'record': record}
+                )
+                continue
+        
+        self.total_processed += len(processed_chunk)
+        
+        # Log progress periodically
+        if self.total_chunks % 10 == 0:
+            self.logger.info(
+                f"Processed {self.total_chunks} chunks, "
+                f"{self.total_processed} total records, "
+                f"{self.failed_records} failures"
+            )
+        
+        return processed_chunk
+    
+    def _clean_record(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Clean and validate individual record.
+        
+        Args:
+            record: Raw record dictionary
+            
+        Returns:
+            Cleaned record or None if invalid
+        """
+        if not record:
+            return None
+            
+        cleaned = {}
+        
+        # Basic field cleaning
+        for key, value in record.items():
+            if value is not None:
+                # Strip whitespace from strings
+                if isinstance(value, str):
+                    value = value.strip()
+                    # Convert empty strings to None
+                    if value == '':
+                        value = None
+                
+                cleaned[key] = value
+        
+        # Validate required fields based on record type
+        if 'state' in cleaned:
+            # Normalize state identifier
+            state = cleaned['state']
+            normalized_state = self.state_utils.normalize_state_identifier(str(state))
+            if normalized_state:
+                cleaned['state'] = normalized_state
+            else:
+                # Invalid state - skip record
+                return None
+        
+        return cleaned if cleaned else None
+    
+    def _write_record_to_stream(self, record: Dict[str, Any]) -> None:
+        """Write record to streaming CSV output."""
+        if not self._csv_writer:
+            return
+            
+        # Initialize CSV writer with fieldnames on first record
+        if not self._headers_written:
+            self._csv_writer.fieldnames = list(record.keys())
+            self._csv_writer.writeheader()
+            self._headers_written = True
+        
+        # Ensure all required fields are present
+        output_record = {field: record.get(field, '') for field in self._csv_writer.fieldnames}
+        self._csv_writer.writerow(output_record)
+        
+        # Flush periodically for real-time monitoring
+        if self.total_processed % 100 == 0:
+            self._output_handle.flush()
+    
+    def get_processing_stats(self) -> Dict[str, Any]:
+        """Get processing statistics."""
+        return {
+            'total_processed': self.total_processed,
+            'successful_records': self.successful_records,
+            'failed_records': self.failed_records,
+            'total_chunks': self.total_chunks,
+            'success_rate': (
+                self.successful_records / (self.successful_records + self.failed_records)
+                if (self.successful_records + self.failed_records) > 0 else 0
+            ),
+            'chunk_size': self.chunk_size,
+            'error_summary': self.error_reporter.get_error_summary()
+        }
+
+def test_streaming_functionality():
+    """Test streaming data processing functionality."""
+    import tempfile
+    import os
+    
+    # Create test data
+    test_data = [
+        {'state': 'CA', 'year': 2022, 'value': 250},
+        {'state': 'TX', 'year': 2022, 'value': 245},
+        {'state': 'NY', 'year': 2022, 'value': 255},
+        {'state': 'FL', 'year': 2022, 'value': 240},
+        {'state': 'IL', 'year': 2022, 'value': 248}
+    ]
+    
+    # Test streaming processor
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        output_file = f.name
+    
+    try:
+        with StreamingDataProcessor(chunk_size=2, output_file=output_file) as processor:
+            # Simulate processing chunks
+            chunks = [test_data[:2], test_data[2:4], test_data[4:]]
+            
+            for chunk in chunks:
+                processed_chunk = processor._process_chunk(chunk)
+                print(f"Processed chunk: {len(processed_chunk)} records")
+            
+            stats = processor.get_processing_stats()
+            print(f"Processing stats: {stats}")
+        
+        # Verify output file was created and has content
+        if os.path.exists(output_file):
+            with open(output_file, 'r') as f:
+                content = f.read()
+                print(f"Output file contains {len(content.splitlines())} lines")
+            
+            # Clean up
+            os.unlink(output_file)
+            print("Streaming test completed successfully!")
+        else:
+            print("ERROR: Output file was not created")
+            
+    except Exception as e:
+        print(f"Streaming test failed: {e}")
+        if os.path.exists(output_file):
+            os.unlink(output_file)
+
+
+class BatchDataCollector:
+    """
+    Batch data collector with streaming support and memory optimization.
+    
+    Collects data in batches and processes them using streaming to minimize
+    memory usage for large datasets.
+    """
+    
+    def __init__(
+        self,
+        api_client: APIClient,
+        parser: 'BaseAPIResponseParser',
+        state_utils: Optional[StateUtils] = None,
+        batch_size: int = 50,
+        chunk_size: int = 1000
+    ):
+        """
+        Initialize batch collector.
+        
+        Args:
+            api_client: API client for making requests
+            parser: Response parser
+            state_utils: StateUtils instance
+            batch_size: Number of API requests per batch
+            chunk_size: Records per processing chunk
+        """
+        self.api_client = api_client
+        self.parser = parser
+        self.state_utils = state_utils or StateUtils()
+        self.batch_size = batch_size
+        self.chunk_size = chunk_size
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.error_reporter = ErrorReporter(self.logger)
+    
+    def collect_with_streaming(
+        self,
+        request_configs: List[Dict[str, Any]],
+        output_file: Optional[str] = None
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Collect data with streaming processing.
+        
+        Args:
+            request_configs: List of request configuration dictionaries
+            output_file: Optional file to stream results to
+            
+        Yields:
+            Processed data chunks
+        """
+        with StreamingDataProcessor(
+            chunk_size=self.chunk_size,
+            output_file=output_file,
+            state_utils=self.state_utils
+        ) as processor:
+            
+            # Process requests in batches
+            for batch_start in range(0, len(request_configs), self.batch_size):
+                batch_end = min(batch_start + self.batch_size, len(request_configs))
+                batch_configs = request_configs[batch_start:batch_end]
+                
+                self.logger.info(f"Processing batch {batch_start//self.batch_size + 1}: "
+                               f"requests {batch_start}-{batch_end-1}")
+                
+                # Collect batch responses
+                batch_responses = self._collect_batch(batch_configs)
+                
+                # Stream process the batch
+                for chunk in processor.process_api_responses_stream(batch_responses, self.parser):
+                    yield chunk
+            
+            # Log final statistics
+            stats = processor.get_processing_stats()
+            self.logger.info(f"Collection completed: {stats}")
+    
+    def _collect_batch(
+        self, 
+        batch_configs: List[Dict[str, Any]]
+    ) -> Iterator[Tuple[Dict[str, Any], Dict[str, Any]]]:
+        """
+        Collect a batch of API responses.
+        
+        Args:
+            batch_configs: Batch of request configurations
+            
+        Yields:
+            (response_data, context) tuples
+        """
+        for config in batch_configs:
+            try:
+                # Extract request parameters
+                url = config['url']
+                params = config.get('params', {})
+                context = config.get('context', {})
+                
+                # Make API request
+                response = self.api_client.get(url, params=params)
+                response_data = response.json()
+                
+                yield (response_data, context)
+                
+            except Exception as e:
+                self.error_reporter.report_api_error(
+                    operation='batch_collection',
+                    component=self.api_client.api_name,
+                    exception=e,
+                    state=config.get('context', {}).get('state'),
+                    year=config.get('context', {}).get('year'),
+                    url=config.get('url')
+                )
+                continue
+    
+    def collect_to_file(
+        self,
+        request_configs: List[Dict[str, Any]],
+        output_file: str
+    ) -> Dict[str, Any]:
+        """
+        Collect data directly to file with streaming.
+        
+        Args:
+            request_configs: List of request configurations
+            output_file: Output CSV file path
+            
+        Returns:
+            Collection statistics
+        """
+        total_records = 0
+        
+        for chunk in self.collect_with_streaming(request_configs, output_file):
+            total_records += len(chunk)
+        
+        return {
+            'total_records': total_records,
+            'output_file': output_file,
+            'request_count': len(request_configs)
+        }
+
+class ConcurrentDataCollector:
+    """
+    Concurrent data collector using asyncio and threading for improved performance.
+    
+    Collects data from multiple sources concurrently while respecting rate limits
+    and maintaining error handling.
+    """
+    
+    def __init__(
+        self,
+        max_concurrent_requests: int = 5,
+        max_workers: int = 3,
+        default_timeout: int = 30
+    ):
+        """
+        Initialize concurrent collector.
+        
+        Args:
+            max_concurrent_requests: Maximum concurrent API requests
+            max_workers: Maximum number of worker threads
+            default_timeout: Default request timeout in seconds
+        """
+        self.max_concurrent_requests = max_concurrent_requests
+        self.max_workers = max_workers
+        self.default_timeout = default_timeout
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.error_reporter = ErrorReporter(self.logger)
+        
+        # Threading coordination
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        self.lock = threading.Lock()
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        
+        # Results coordination
+        self.results = []
+        self.failed_requests = []
+        self.completed_requests = 0
+        self.total_requests = 0
+    
+    def collect_concurrent(
+        self,
+        collectors: List[Tuple[Any, str, Dict[str, Any]]],  # (collector_instance, method_name, kwargs)
+        merge_results: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Collect data from multiple collectors concurrently.
+        
+        Args:
+            collectors: List of (collector_instance, method_name, kwargs) tuples
+            merge_results: Whether to merge all results into single DataFrame
+            
+        Returns:
+            Dictionary with collection results and statistics
+        """
+        import concurrent.futures
+        
+        self.total_requests = len(collectors)
+        self.logger.info(f"Starting concurrent collection with {len(collectors)} collectors")
+        
+        # Submit all collection tasks
+        future_to_collector = {}
+        for i, (collector, method_name, kwargs) in enumerate(collectors):
+            future = self.executor.submit(
+                self._safe_collect_data, 
+                collector, 
+                method_name, 
+                kwargs, 
+                i
+            )
+            future_to_collector[future] = (collector, method_name, i)
+        
+        # Collect results as they complete
+        collection_results = {}
+        as_completed = concurrent.futures.as_completed(future_to_collector, timeout=600)  # 10 min timeout
+        
+        for future in as_completed:
+            collector, method_name, collector_id = future_to_collector[future]
+            
+            try:
+                result = future.result()
+                collection_results[f"{collector.__class__.__name__}_{collector_id}"] = result
+                
+                with self.lock:
+                    self.completed_requests += 1
+                    
+                self.logger.info(
+                    f"Completed {self.completed_requests}/{self.total_requests}: "
+                    f"{collector.__class__.__name__}.{method_name}"
+                )
+                
+            except Exception as e:
+                with self.lock:
+                    self.failed_requests.append({
+                        'collector': collector.__class__.__name__,
+                        'method': method_name,
+                        'error': str(e),
+                        'collector_id': collector_id
+                    })
+                    
+                self.error_reporter.report_error(
+                    error_type='concurrent_collection_failed',
+                    severity='error',
+                    message=f"Concurrent collection failed for {collector.__class__.__name__}.{method_name}",
+                    context=ErrorContext(
+                        operation='concurrent_collection',
+                        component='ConcurrentDataCollector',
+                        metadata={
+                            'collector_class': collector.__class__.__name__,
+                            'method_name': method_name,
+                            'collector_id': collector_id
+                        }
+                    ),
+                    exception=e
+                )
+        
+        # Process and merge results if requested
+        if merge_results:
+            merged_df = self._merge_collection_results(collection_results)
+        else:
+            merged_df = None
+        
+        # Compile statistics
+        stats = {
+            'total_collectors': len(collectors),
+            'successful_collections': len(collection_results),
+            'failed_collections': len(self.failed_requests),
+            'success_rate': len(collection_results) / len(collectors) if collectors else 0,
+            'collection_results': collection_results,
+            'failed_requests': self.failed_requests,
+            'merged_dataframe': merged_df,
+            'error_summary': self.error_reporter.get_error_summary()
+        }
+        
+        self.logger.info(f"Concurrent collection completed: {stats['success_rate']:.1%} success rate")
+        
+        return stats
+    
+    def _safe_collect_data(
+        self, 
+        collector: Any, 
+        method_name: str, 
+        kwargs: Dict[str, Any],
+        collector_id: int
+    ) -> Dict[str, Any]:
+        """
+        Safely execute data collection with error handling.
+        
+        Args:
+            collector: Collector instance
+            method_name: Method to call on collector
+            kwargs: Arguments for the method
+            collector_id: Unique identifier for this collector
+            
+        Returns:
+            Collection result dictionary
+        """
+        try:
+            # Get the method from the collector
+            method = getattr(collector, method_name)
+            
+            # Execute the collection
+            start_time = time.time()
+            result = method(**kwargs)
+            execution_time = time.time() - start_time
+            
+            # Standardize result format
+            if isinstance(result, pd.DataFrame):
+                return {
+                    'data': result,
+                    'record_count': len(result),
+                    'execution_time': execution_time,
+                    'collector_class': collector.__class__.__name__,
+                    'method_name': method_name,
+                    'success': True
+                }
+            elif isinstance(result, dict):
+                return {
+                    'data': result.get('dataframe', result),
+                    'record_count': result.get('total_records', 0),
+                    'execution_time': execution_time,
+                    'collector_class': collector.__class__.__name__,
+                    'method_name': method_name,
+                    'success': True,
+                    'metadata': result
+                }
+            else:
+                return {
+                    'data': result,
+                    'record_count': 0,
+                    'execution_time': execution_time,
+                    'collector_class': collector.__class__.__name__,
+                    'method_name': method_name,
+                    'success': True
+                }
+                
+        except Exception as e:
+            self.error_reporter.report_error(
+                error_type='collection_execution_failed',
+                severity='error',
+                message=f"Failed to execute {collector.__class__.__name__}.{method_name}: {str(e)}",
+                context=ErrorContext(
+                    operation='data_collection',
+                    component=collector.__class__.__name__,
+                    metadata={'method_name': method_name, 'collector_id': collector_id}
+                ),
+                exception=e
+            )
+            raise
+    
+    def _merge_collection_results(self, collection_results: Dict[str, Any]) -> Optional[pd.DataFrame]:
+        """
+        Merge results from multiple collectors into single DataFrame.
+        
+        Args:
+            collection_results: Dictionary of collection results
+            
+        Returns:
+            Merged DataFrame or None if merge fails
+        """
+        try:
+            dataframes = []
+            
+            for key, result in collection_results.items():
+                if result.get('success') and 'data' in result:
+                    data = result['data']
+                    if isinstance(data, pd.DataFrame) and not data.empty:
+                        # Add source information
+                        data = data.copy()
+                        data['data_source'] = result['collector_class']
+                        data['collection_method'] = result['method_name']
+                        dataframes.append(data)
+            
+            if dataframes:
+                merged_df = pd.concat(dataframes, ignore_index=True, sort=False)
+                self.logger.info(f"Merged {len(dataframes)} datasets into {len(merged_df)} total records")
+                return merged_df
+            else:
+                self.logger.warning("No valid DataFrames found to merge")
+                return None
+                
+        except Exception as e:
+            self.error_reporter.report_error(
+                error_type='result_merge_failed',
+                severity='error',
+                message=f"Failed to merge collection results: {str(e)}",
+                context=ErrorContext(
+                    operation='result_merging',
+                    component='ConcurrentDataCollector'
+                ),
+                exception=e
+            )
+            return None
+    
+    def collect_with_rate_limiting(
+        self,
+        request_configs: List[Dict[str, Any]],
+        api_client: APIClient,
+        parser: 'BaseAPIResponseParser',
+        requests_per_second: float = 2.0
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        Collect data with concurrent requests but respecting rate limits.
+        
+        Args:
+            request_configs: List of request configurations
+            api_client: API client to use
+            parser: Response parser
+            requests_per_second: Maximum requests per second
+            
+        Yields:
+            Parsed response dictionaries
+        """
+        import asyncio
+        import aiohttp
+        from asyncio import Semaphore
+        
+        async def rate_limited_request(session, semaphore, config):
+            async with semaphore:
+                try:
+                    # Add rate limiting delay
+                    await asyncio.sleep(1.0 / requests_per_second)
+                    
+                    # Make request
+                    async with session.get(
+                        config['url'], 
+                        params=config.get('params', {}),
+                        timeout=aiohttp.ClientTimeout(total=self.default_timeout)
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            # Parse response
+                            records = parser.parse_response(data, **config.get('context', {}))
+                            return {
+                                'success': True,
+                                'records': records,
+                                'config': config
+                            }
+                        else:
+                            return {
+                                'success': False,
+                                'error': f"HTTP {response.status}",
+                                'config': config
+                            }
+                            
+                except Exception as e:
+                    return {
+                        'success': False,
+                        'error': str(e),
+                        'config': config
+                    }
+        
+        async def collect_all():
+            semaphore = Semaphore(self.max_concurrent_requests)
+            
+            async with aiohttp.ClientSession() as session:
+                tasks = [
+                    rate_limited_request(session, semaphore, config)
+                    for config in request_configs
+                ]
+                
+                # Process results as they complete
+                for task in asyncio.as_completed(tasks):
+                    result = await task
+                    yield result
+        
+        # Run async collection
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        async def run_collection():
+            results = []
+            async for result in collect_all():
+                results.append(result)
+            return results
+        
+        results = loop.run_until_complete(run_collection())
+        
+        for result in results:
+            yield result
+    
+    def shutdown(self):
+        """Shutdown the concurrent collector and clean up resources."""
+        if hasattr(self, 'executor'):
+            self.executor.shutdown(wait=True)
+        self.logger.info("Concurrent data collector shutdown completed")
+
+class DataCache:
+    """
+    Persistent data cache with incremental update capabilities.
+    
+    Provides intelligent caching for API responses and processed data
+    to minimize redundant requests and improve collection efficiency.
+    """
+    
+    def __init__(
+        self, 
+        cache_dir: str = "data/.cache",
+        ttl_hours: int = 24,
+        max_cache_size_mb: int = 500
+    ):
+        """
+        Initialize data cache.
+        
+        Args:
+            cache_dir: Directory for cache storage
+            ttl_hours: Time-to-live for cache entries in hours
+            max_cache_size_mb: Maximum cache size in megabytes
+        """
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.ttl_seconds = ttl_hours * 3600
+        self.max_cache_size_bytes = max_cache_size_mb * 1024 * 1024
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
+        # Cache metadata file
+        self.metadata_file = self.cache_dir / "cache_metadata.json"
+        self.metadata = self._load_metadata()
+        
+        # Cleanup old entries on initialization
+        self._cleanup_expired_entries()
+    
+    def _load_metadata(self) -> Dict[str, Any]:
+        """Load cache metadata from disk."""
+        if self.metadata_file.exists():
+            try:
+                with open(self.metadata_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                self.logger.warning(f"Failed to load cache metadata: {e}")
+        
+        return {
+            'entries': {},
+            'created_at': datetime.now().isoformat(),
+            'version': '1.0'
+        }
+    
+    def _save_metadata(self) -> None:
+        """Save cache metadata to disk."""
+        try:
+            with open(self.metadata_file, 'w') as f:
+                json.dump(self.metadata, f, indent=2, default=str)
+        except IOError as e:
+            self.logger.error(f"Failed to save cache metadata: {e}")
+    
+    def _generate_cache_key(self, operation: str, **kwargs) -> str:
+        """Generate a unique cache key for an operation."""
+        import hashlib
+        
+        # Create deterministic key from operation and parameters
+        key_data = f"{operation}:{json.dumps(kwargs, sort_keys=True, default=str)}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+    
+    def _get_cache_file_path(self, cache_key: str) -> Path:
+        """Get file path for cache entry."""
+        return self.cache_dir / f"{cache_key}.json"
+    
+    def get(self, operation: str, **kwargs) -> Optional[Any]:
+        """
+        Get cached data for an operation.
+        
+        Args:
+            operation: Operation identifier
+            **kwargs: Operation parameters
+            
+        Returns:
+            Cached data or None if not found/expired
+        """
+        cache_key = self._generate_cache_key(operation, **kwargs)
+        
+        # Check if entry exists and is valid
+        if cache_key not in self.metadata['entries']:
+            return None
+        
+        entry_metadata = self.metadata['entries'][cache_key]
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        # Check if file exists
+        if not cache_file.exists():
+            self._remove_entry(cache_key)
+            return None
+        
+        # Check if entry has expired
+        created_time = datetime.fromisoformat(entry_metadata['created_at'])
+        if (datetime.now() - created_time).total_seconds() > self.ttl_seconds:
+            self._remove_entry(cache_key)
+            return None
+        
+        # Load and return cached data
+        try:
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+            
+            # Update access time
+            self.metadata['entries'][cache_key]['last_accessed'] = datetime.now().isoformat()
+            self._save_metadata()
+            
+            self.logger.debug(f"Cache hit for {operation}")
+            return data
+            
+        except (json.JSONDecodeError, IOError) as e:
+            self.logger.warning(f"Failed to load cache entry {cache_key}: {e}")
+            self._remove_entry(cache_key)
+            return None
+    
+    def set(self, operation: str, data: Any, **kwargs) -> bool:
+        """
+        Cache data for an operation.
+        
+        Args:
+            operation: Operation identifier
+            data: Data to cache
+            **kwargs: Operation parameters
+            
+        Returns:
+            True if successfully cached, False otherwise
+        """
+        cache_key = self._generate_cache_key(operation, **kwargs)
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        try:
+            # Convert data to JSON-serializable format
+            if isinstance(data, pd.DataFrame):
+                serializable_data = {
+                    'type': 'dataframe',
+                    'data': data.to_dict('records'),
+                    'columns': data.columns.tolist(),
+                    'index': data.index.tolist()
+                }
+            else:
+                serializable_data = {
+                    'type': 'generic',
+                    'data': data
+                }
+            
+            # Write cache file
+            with open(cache_file, 'w') as f:
+                json.dump(serializable_data, f, indent=2, default=str)
+            
+            # Update metadata
+            file_size = cache_file.stat().st_size
+            self.metadata['entries'][cache_key] = {
+                'operation': operation,
+                'parameters': kwargs,
+                'created_at': datetime.now().isoformat(),
+                'last_accessed': datetime.now().isoformat(),
+                'file_size': file_size,
+                'data_type': serializable_data['type']
+            }
+            
+            self._save_metadata()
+            
+            # Check cache size limits
+            self._enforce_cache_limits()
+            
+            self.logger.debug(f"Cached data for {operation}")
+            return True
+            
+        except (IOError, TypeError) as e:
+            self.logger.error(f"Failed to cache data for {operation}: {e}")
+            return False
+    
+    def _remove_entry(self, cache_key: str) -> None:
+        """Remove a cache entry."""
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        # Remove file
+        if cache_file.exists():
+            try:
+                cache_file.unlink()
+            except OSError:
+                pass
+        
+        # Remove from metadata
+        if cache_key in self.metadata['entries']:
+            del self.metadata['entries'][cache_key]
+            self._save_metadata()
+    
+    def _cleanup_expired_entries(self) -> None:
+        """Remove expired cache entries."""
+        current_time = datetime.now()
+        expired_keys = []
+        
+        for cache_key, entry in self.metadata['entries'].items():
+            created_time = datetime.fromisoformat(entry['created_at'])
+            if (current_time - created_time).total_seconds() > self.ttl_seconds:
+                expired_keys.append(cache_key)
+        
+        for key in expired_keys:
+            self._remove_entry(key)
+        
+        if expired_keys:
+            self.logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
+    
+    def _enforce_cache_limits(self) -> None:
+        """Enforce cache size limits by removing oldest entries."""
+        total_size = sum(entry.get('file_size', 0) for entry in self.metadata['entries'].values())
+        
+        if total_size <= self.max_cache_size_bytes:
+            return
+        
+        # Sort entries by last access time (oldest first)
+        entries_by_access = sorted(
+            self.metadata['entries'].items(),
+            key=lambda x: x[1].get('last_accessed', x[1]['created_at'])
+        )
+        
+        # Remove oldest entries until under limit
+        for cache_key, entry in entries_by_access:
+            self._remove_entry(cache_key)
+            total_size -= entry.get('file_size', 0)
+            
+            if total_size <= self.max_cache_size_bytes:
+                break
+        
+        self.logger.info(f"Enforced cache size limit: removed entries to stay under {self.max_cache_size_bytes} bytes")
+    
+    def invalidate(self, operation: str = None, **kwargs) -> int:
+        """
+        Invalidate cache entries.
+        
+        Args:
+            operation: Specific operation to invalidate (None for all)
+            **kwargs: Additional parameters to match
+            
+        Returns:
+            Number of entries invalidated
+        """
+        if operation is None:
+            # Invalidate all entries
+            count = len(self.metadata['entries'])
+            for cache_key in list(self.metadata['entries'].keys()):
+                self._remove_entry(cache_key)
+            return count
+        
+        # Find matching entries
+        invalidated = 0
+        for cache_key, entry in list(self.metadata['entries'].items()):
+            if entry['operation'] == operation:
+                # Check if parameters match
+                if kwargs:
+                    entry_params = entry.get('parameters', {})
+                    if all(entry_params.get(k) == v for k, v in kwargs.items()):
+                        self._remove_entry(cache_key)
+                        invalidated += 1
+                else:
+                    self._remove_entry(cache_key)
+                    invalidated += 1
+        
+        if invalidated:
+            self.logger.info(f"Invalidated {invalidated} cache entries for {operation}")
+        
+        return invalidated
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total_entries = len(self.metadata['entries'])
+        total_size = sum(entry.get('file_size', 0) for entry in self.metadata['entries'].values())
+        
+        # Group by operation
+        operations = defaultdict(int)
+        for entry in self.metadata['entries'].values():
+            operations[entry['operation']] += 1
+        
+        return {
+            'total_entries': total_entries,
+            'total_size_bytes': total_size,
+            'total_size_mb': total_size / (1024 * 1024),
+            'cache_hit_rate': getattr(self, '_hit_rate', 0.0),
+            'operations': dict(operations),
+            'cache_dir': str(self.cache_dir),
+            'ttl_hours': self.ttl_seconds / 3600,
+            'max_size_mb': self.max_cache_size_bytes / (1024 * 1024)
+        }
+
+
+class IncrementalDataCollector:
+    """
+    Incremental data collector with intelligent caching and update detection.
+    
+    Tracks collection state and only fetches new/changed data to minimize
+    API calls and improve collection efficiency.
+    """
+    
+    def __init__(
+        self,
+        cache_dir: str = "data/.cache",
+        state_file: str = "data/.cache/collection_state.json"
+    ):
+        """
+        Initialize incremental collector.
+        
+        Args:
+            cache_dir: Directory for cache storage
+            state_file: File to store collection state
+        """
+        self.cache = DataCache(cache_dir)
+        self.state_file = Path(state_file)
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
+        # Load collection state
+        self.state = self._load_collection_state()
+    
+    def _load_collection_state(self) -> Dict[str, Any]:
+        """Load collection state from disk."""
+        if self.state_file.exists():
+            try:
+                with open(self.state_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                self.logger.warning(f"Failed to load collection state: {e}")
+        
+        return {
+            'last_collections': {},
+            'data_versions': {},
+            'created_at': datetime.now().isoformat()
+        }
+    
+    def _save_collection_state(self) -> None:
+        """Save collection state to disk."""
+        try:
+            with open(self.state_file, 'w') as f:
+                json.dump(self.state, f, indent=2, default=str)
+        except IOError as e:
+            self.logger.error(f"Failed to save collection state: {e}")
+    
+    def collect_incremental(
+        self,
+        collector: Any,
+        method_name: str,
+        collection_id: str,
+        force_refresh: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Perform incremental data collection.
+        
+        Args:
+            collector: Data collector instance
+            method_name: Method to call on collector
+            collection_id: Unique identifier for this collection
+            force_refresh: Force full refresh ignoring cache
+            **kwargs: Arguments for the collection method
+            
+        Returns:
+            Collection result with metadata
+        """
+        # Check if we need to collect new data
+        if not force_refresh:
+            # Try to get from cache first
+            cached_data = self.cache.get(f"collection_{collection_id}", **kwargs)
+            if cached_data:
+                self.logger.info(f"Using cached data for {collection_id}")
+                return {
+                    'data': cached_data,
+                    'from_cache': True,
+                    'collection_id': collection_id,
+                    'last_updated': self.state['last_collections'].get(collection_id)
+                }
+        
+        # Determine what data needs to be collected
+        collection_plan = self._plan_incremental_collection(collection_id, **kwargs)
+        
+        if collection_plan['needs_full_collection']:
+            self.logger.info(f"Performing full collection for {collection_id}")
+            result = self._perform_full_collection(collector, method_name, **kwargs)
+        else:
+            self.logger.info(f"Performing incremental collection for {collection_id}")
+            result = self._perform_incremental_collection(
+                collector, method_name, collection_plan, **kwargs
+            )
+        
+        # Cache the results
+        if result and 'data' in result:
+            self.cache.set(f"collection_{collection_id}", result['data'], **kwargs)
+        
+        # Update collection state
+        self.state['last_collections'][collection_id] = datetime.now().isoformat()
+        self.state['data_versions'][collection_id] = result.get('version', 1)
+        self._save_collection_state()
+        
+        result.update({
+            'from_cache': False,
+            'collection_id': collection_id,
+            'collection_plan': collection_plan
+        })
+        
+        return result
+    
+    def _plan_incremental_collection(self, collection_id: str, **kwargs) -> Dict[str, Any]:
+        """
+        Plan incremental collection based on state and parameters.
+        
+        Args:
+            collection_id: Collection identifier
+            **kwargs: Collection parameters
+            
+        Returns:
+            Collection plan dictionary
+        """
+        last_collection = self.state['last_collections'].get(collection_id)
+        
+        plan = {
+            'needs_full_collection': False,
+            'incremental_parameters': {},
+            'reason': ''
+        }
+        
+        if not last_collection:
+            plan['needs_full_collection'] = True
+            plan['reason'] = 'First time collection'
+            return plan
+        
+        last_collection_time = datetime.fromisoformat(last_collection)
+        time_since_last = datetime.now() - last_collection_time
+        
+        # Force full collection if too much time has passed
+        if time_since_last.days > 7:
+            plan['needs_full_collection'] = True
+            plan['reason'] = f'Last collection was {time_since_last.days} days ago'
+            return plan
+        
+        # Check for parameter changes that require full collection
+        if 'years' in kwargs:
+            # For time-based collections, only collect new years
+            years = kwargs['years']
+            if isinstance(years, list):
+                max_year_collected = self.state['data_versions'].get(f"{collection_id}_max_year", 0)
+                new_years = [year for year in years if year > max_year_collected]
+                
+                if new_years:
+                    plan['incremental_parameters']['years'] = new_years
+                    plan['reason'] = f'Incremental update for years: {new_years}'
+                else:
+                    plan['reason'] = 'No new years to collect'
+        
+        return plan
+    
+    def _perform_full_collection(self, collector: Any, method_name: str, **kwargs) -> Dict[str, Any]:
+        """Perform full data collection."""
+        method = getattr(collector, method_name)
+        
+        start_time = time.time()
+        result = method(**kwargs)
+        execution_time = time.time() - start_time
+        
+        if isinstance(result, pd.DataFrame):
+            return {
+                'data': result,
+                'record_count': len(result),
+                'execution_time': execution_time,
+                'collection_type': 'full',
+                'version': 1
+            }
+        elif isinstance(result, dict):
+            return {
+                'data': result.get('dataframe', result),
+                'record_count': result.get('total_records', 0),
+                'execution_time': execution_time,
+                'collection_type': 'full',
+                'version': 1,
+                'metadata': result
+            }
+        else:
+            return {
+                'data': result,
+                'record_count': 0,
+                'execution_time': execution_time,
+                'collection_type': 'full',
+                'version': 1
+            }
+    
+    def _perform_incremental_collection(
+        self, 
+        collector: Any, 
+        method_name: str, 
+        collection_plan: Dict[str, Any], 
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Perform incremental data collection."""
+        # Update kwargs with incremental parameters
+        incremental_kwargs = kwargs.copy()
+        incremental_kwargs.update(collection_plan['incremental_parameters'])
+        
+        method = getattr(collector, method_name)
+        
+        start_time = time.time()
+        result = method(**incremental_kwargs)
+        execution_time = time.time() - start_time
+        
+        # Merge with existing cached data if available
+        collection_id = collection_plan.get('collection_id', 'unknown')
+        existing_data = self.cache.get(f"collection_{collection_id}", **kwargs)
+        
+        if existing_data and isinstance(result, pd.DataFrame) and isinstance(existing_data.get('data'), pd.DataFrame):
+            merged_data = pd.concat([existing_data['data'], result], ignore_index=True)
+            merged_data = merged_data.drop_duplicates()  # Remove any duplicates
+        else:
+            merged_data = result
+        
+        if isinstance(merged_data, pd.DataFrame):
+            return {
+                'data': merged_data,
+                'record_count': len(merged_data),
+                'new_records': len(result) if isinstance(result, pd.DataFrame) else 0,
+                'execution_time': execution_time,
+                'collection_type': 'incremental',
+                'version': self.state['data_versions'].get(collection_id, 0) + 1
+            }
+        else:
+            return {
+                'data': result,
+                'record_count': 0,
+                'new_records': 0,
+                'execution_time': execution_time,
+                'collection_type': 'incremental',
+                'version': self.state['data_versions'].get(collection_id, 0) + 1
+            }
+    
+    def get_collection_status(self) -> Dict[str, Any]:
+        """Get status of all collections."""
+        status = {
+            'total_collections': len(self.state['last_collections']),
+            'cache_stats': self.cache.get_stats(),
+            'collections': {}
+        }
+        
+        for collection_id, last_collection in self.state['last_collections'].items():
+            last_time = datetime.fromisoformat(last_collection)
+            status['collections'][collection_id] = {
+                'last_collected': last_collection,
+                'days_since_last': (datetime.now() - last_time).days,
+                'version': self.state['data_versions'].get(collection_id, 1)
+            }
+        
+        return status
+    
+    def force_refresh(self, collection_id: str = None) -> int:
+        """
+        Force refresh of collections by invalidating cache.
+        
+        Args:
+            collection_id: Specific collection to refresh (None for all)
+            
+        Returns:
+            Number of cache entries invalidated
+        """
+        if collection_id:
+            # Invalidate specific collection
+            invalidated = self.cache.invalidate(f"collection_{collection_id}")
+            if collection_id in self.state['last_collections']:
+                del self.state['last_collections'][collection_id]
+            if collection_id in self.state['data_versions']:
+                del self.state['data_versions'][collection_id]
+        else:
+            # Invalidate all collections
+            invalidated = self.cache.invalidate()
+            self.state['last_collections'] = {}
+            self.state['data_versions'] = {}
+        
+        self._save_collection_state()
+        return invalidated
 
 
 class DataValidator:

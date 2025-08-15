@@ -8,6 +8,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import requests
@@ -146,6 +147,108 @@ class CensusEducationFinance(APIBasedCollector):
         self.logger.info(f"Census collection completed: {len(df)} records collected")
 
         return df
+
+    def fetch_state_finance_streaming(
+        self, 
+        years: list[int],
+        output_file: str | None = None,
+        chunk_size: int = 100,
+        batch_size: int = 10
+    ) -> dict[str, Any]:
+        """
+        Fetch Census finance data using streaming to minimize memory usage.
+
+        Args:
+            years: List of years to collect (2009-2022)
+            output_file: Optional CSV file to stream results to
+            chunk_size: Records per processing chunk
+            batch_size: API requests per batch
+
+        Returns:
+            Collection statistics dictionary
+        """
+        # Import streaming classes
+        from .common import BatchDataCollector, ResponseParserFactory
+
+        self.logger.info(f"Starting Census finance streaming collection for {len(years)} years")
+
+        # Census variables to collect
+        variables = [
+            "NAME",      # State name
+            "TOTALEXP",  # Total expenditures
+            "TCURINST",  # Current instruction spending
+            "TCURSSVC",  # Student support services (proxy for special ed)
+            "TCUROTH",   # Other current expenditures
+            "ENROLL",    # Student enrollment
+        ]
+
+        # Generate request configurations
+        request_configs = []
+        for year in years:
+            # Census API endpoint varies by year
+            if year >= 2013:
+                endpoint = f"{self.base_url}/{year}/programs/finances/elementary-secondary-education"
+            else:
+                endpoint = f"{self.base_url}/{year}/governments/school-districts/finance"
+
+            params = {
+                "get": ",".join(variables),
+                "for": "state:*",
+                "key": self.api_key
+            }
+            
+            request_configs.append({
+                'url': endpoint,
+                'params': params,
+                'context': {
+                    'year': year,
+                    'variables': variables
+                }
+            })
+
+        self.logger.info(f"Generated {len(request_configs)} API request configurations")
+
+        # Create parser for Census responses
+        parser = ResponseParserFactory.create_parser('census', self.state_utils)
+
+        # Create batch collector with streaming
+        collector = BatchDataCollector(
+            api_client=self.api_client,
+            parser=parser,
+            state_utils=self.state_utils,
+            batch_size=batch_size,
+            chunk_size=chunk_size
+        )
+
+        if output_file:
+            # Stream directly to file
+            stats = collector.collect_to_file(request_configs, output_file)
+            self.logger.info(f"Census streaming collection completed: {stats}")
+            return stats
+        else:
+            # Stream process and collect in memory (still chunked)
+            total_records = 0
+            all_records = []
+            
+            for chunk in collector.collect_with_streaming(request_configs):
+                all_records.extend(chunk)
+                total_records += len(chunk)
+                
+                # Log progress
+                if total_records % 100 == 0:
+                    self.logger.info(f"Collected {total_records} records so far...")
+
+            # Convert to DataFrame for compatibility
+            df = pd.DataFrame(all_records)
+            self.results = all_records  # Update internal results
+            
+            self.logger.info(f"Census streaming collection completed: {len(df)} records")
+            
+            return {
+                'total_records': len(df),
+                'total_requests': len(request_configs),
+                'dataframe': df
+            }
 
     def _parse_finance_record(self, row_data: dict, year: int) -> dict | None:
         """
