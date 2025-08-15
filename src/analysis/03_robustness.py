@@ -3407,9 +3407,8 @@ overall credibility of the special education policy evaluation findings."""
 
 def main():
     """Run robustness analysis pipeline."""
-    analyzer = RobustnessAnalyzer()
-
     try:
+        analyzer = RobustnessAnalyzer()
         analyzer.run_full_robustness_suite()
         return True
 

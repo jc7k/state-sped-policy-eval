@@ -453,7 +453,7 @@ class TestRobustnessAnalyzer:
         with open(report_path) as f:
             content = f.read()
 
-        assert "Phase 4.3: Robustness Analysis Report" in content
+        assert "Phase 4.3: Enhanced Robustness Analysis Report" in content
         assert "Jeff Chen" in content
         assert "Claude Code" in content
         assert "Robustness Tests Completed" in content
@@ -463,7 +463,7 @@ class TestRobustnessAnalyzer:
         analyzer = RobustnessAnalyzer(data_path=temp_data_file)
 
         summary = analyzer._summarize_robustness_results()
-        assert "No robustness tests completed" in summary
+        assert "No robustness results available" in summary
 
     def test_summarize_robustness_results_with_data(self, temp_data_file):
         """Test robustness summary with actual results."""

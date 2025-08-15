@@ -22,6 +22,7 @@ class DashboardGenerator:
         descriptive_results: dict[str, Any] | None = None,
         causal_results: dict[str, Any] | None = None,
         enhanced_inference_results: dict[str, Any] | None = None,
+        output_dir: Path | str | None = None,
     ):
         """
         Initialize dashboard generator with analysis results.
@@ -31,13 +32,17 @@ class DashboardGenerator:
             descriptive_results: Results from descriptive analysis
             causal_results: Results from causal analysis
             enhanced_inference_results: Results from Phase 3 statistical inference
+            output_dir: Output directory for dashboards (defaults to "output/dashboards")
         """
         self.robustness_results = robustness_results or {}
         self.descriptive_results = descriptive_results or {}
         self.causal_results = causal_results or {}
         self.enhanced_inference_results = enhanced_inference_results or {}
 
-        self.output_dir = Path("output/dashboards")
+        if output_dir is not None:
+            self.output_dir = Path(output_dir)
+        else:
+            self.output_dir = Path("output/dashboards")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_dashboard(self, filename: str = "analysis_dashboard.html") -> str:

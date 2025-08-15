@@ -884,9 +884,8 @@ Proceed to Phase 4.3: Robustness and Extensions
 
 def main():
     """Run main causal analysis pipeline."""
-    analyzer = CausalAnalyzer()
-
     try:
+        analyzer = CausalAnalyzer()
         analyzer.run_full_analysis()
         return True
 

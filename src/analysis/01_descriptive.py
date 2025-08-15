@@ -462,9 +462,8 @@ def main():
     print("Phase 4.1: Running Descriptive Analysis")
     print("=" * 50)
 
-    analyzer = DescriptiveAnalyzer()
-
     try:
+        analyzer = DescriptiveAnalyzer()
         report_path = analyzer.generate_descriptive_report()
         print("\n✅ Descriptive analysis completed successfully!")
         print(f"📊 Report available at: {report_path}")

@@ -299,13 +299,19 @@ class TestDescriptiveAnalyzerIntegration:
         analyzer.output_dir = Path(temp_output_dir)
         analyzer.tables_dir = analyzer.output_dir / "tables"
         analyzer.figures_dir = analyzer.output_dir / "figures"
+        analyzer.reports_dir = analyzer.output_dir / "reports"
+        
+        # Create the directories after overriding paths
+        analyzer.tables_dir.mkdir(parents=True, exist_ok=True)
+        analyzer.figures_dir.mkdir(parents=True, exist_ok=True)
+        analyzer.reports_dir.mkdir(parents=True, exist_ok=True)
 
         # Should not raise errors even with minimal data
         report_path = analyzer.generate_descriptive_report()
 
         assert Path(report_path).exists()
 
-    @patch("matplotlib.pyplot.savefig")
+    @patch("matplotlib.figure.Figure.savefig")
     def test_plot_creation_without_saving(self, mock_savefig, temp_data_file):
         """Test plot creation without actually saving files."""
         analyzer = DescriptiveAnalyzer(data_path=temp_data_file)

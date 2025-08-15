@@ -66,11 +66,11 @@ class TestDashboardGenerator:
     def test_init_creates_output_directory(self, temp_output_dir):
         """Test that initialization creates output directory."""
         output_dir = temp_output_dir / "dashboards"
-        generator = DashboardGenerator()
-        generator.output_dir = output_dir
+        generator = DashboardGenerator(output_dir=output_dir)
 
         # Directory should be created during __init__
         assert output_dir.exists()
+        assert generator.output_dir == output_dir
 
     def test_create_summary_card(self, generator):
         """Test summary card generation."""
@@ -85,10 +85,16 @@ class TestDashboardGenerator:
         """Test that dashboard generation creates HTML file."""
         generator.output_dir = temp_output_dir
 
-        with patch("plotly.graph_objects.Figure.write_html") as mock_write:
+        with patch("src.reporting.dashboard_generator.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             output_path = generator.generate_dashboard("test_dashboard.html")
 
-            assert mock_write.called
+            assert mock_fig.write_html.called
             expected_path = str(temp_output_dir / "test_dashboard.html")
             assert output_path == expected_path
 
@@ -97,7 +103,16 @@ class TestDashboardGenerator:
         generator = DashboardGenerator()
         generator.output_dir = temp_output_dir
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("plotly.subplots.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.add_trace = Mock()
+            mock_fig.add_hline = Mock()
+            mock_fig.add_vline = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             # Should not raise an error with empty results
             output_path = generator.generate_dashboard()
             assert output_path is not None
@@ -106,7 +121,13 @@ class TestDashboardGenerator:
         """Test proper filename handling."""
         generator.output_dir = temp_output_dir
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("src.reporting.dashboard_generator.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             # Test default filename
             output_path = generator.generate_dashboard()
             assert output_path.endswith("analysis_dashboard.html")
@@ -118,12 +139,17 @@ class TestDashboardGenerator:
     def test_treatment_effects_plot_data_handling(self, generator):
         """Test treatment effects plot handles data correctly."""
         # This tests the private method indirectly through the main function
-        with patch("plotly.graph_objects.Figure") as mock_fig:
-            mock_fig.return_value.write_html = Mock()
+        with patch("src.reporting.dashboard_generator.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             generator.generate_dashboard()
 
             # Should have been called without errors
-            assert mock_fig.called
+            assert mock_subplots.called
 
     def test_method_comparison_with_missing_data(self, temp_output_dir):
         """Test method comparison handles missing data gracefully."""
@@ -135,7 +161,16 @@ class TestDashboardGenerator:
         generator = DashboardGenerator(robustness_results=partial_results)
         generator.output_dir = temp_output_dir
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("plotly.subplots.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.add_trace = Mock()
+            mock_fig.add_hline = Mock()
+            mock_fig.add_vline = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             # Should handle missing data without errors
             output_path = generator.generate_dashboard()
             assert output_path is not None
@@ -147,7 +182,16 @@ class TestDashboardGenerator:
             "power_analysis": {"overall_assessment": {"average_power": 0.01}}
         }
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("plotly.subplots.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.add_trace = Mock()
+            mock_fig.add_hline = Mock()
+            mock_fig.add_vline = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             output_path = generator.generate_dashboard()
             assert output_path is not None
 
@@ -156,7 +200,16 @@ class TestDashboardGenerator:
             "power_analysis": {"overall_assessment": {"average_power": 0.99}}
         }
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("plotly.subplots.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.add_trace = Mock()
+            mock_fig.add_hline = Mock()
+            mock_fig.add_vline = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             output_path = generator.generate_dashboard()
             assert output_path is not None
 
@@ -165,7 +218,16 @@ class TestDashboardGenerator:
         generator.enhanced_inference_results = {"effect_sizes": {}}
         generator.output_dir = temp_output_dir
 
-        with patch("plotly.graph_objects.Figure.write_html"):
+        with patch("plotly.subplots.make_subplots") as mock_subplots:
+            mock_fig = Mock()
+            mock_fig.write_html = Mock()
+            mock_fig.add_trace = Mock()
+            mock_fig.add_hline = Mock()
+            mock_fig.add_vline = Mock()
+            mock_fig.update_layout = Mock()
+            mock_fig.data = []
+            mock_subplots.return_value = mock_fig
+            
             # Should handle empty effect sizes gracefully
             output_path = generator.generate_dashboard()
             assert output_path is not None

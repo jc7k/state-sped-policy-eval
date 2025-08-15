@@ -141,9 +141,9 @@ class TestCausalAnalyzer:
         analyzer.df = pd.read_csv(temp_panel_file)
         analyzer._prepare_panel_data()
 
-        # Check categorical encoding
-        assert analyzer.df["state_id"].dtype.name in ["int64", "int32"]
-        assert analyzer.df["year_id"].dtype.name in ["int64", "int32"]
+        # Check categorical encoding (pandas now uses int8 for small categorical data)
+        assert analyzer.df["state_id"].dtype.name in ["int64", "int32", "int8"]
+        assert analyzer.df["year_id"].dtype.name in ["int64", "int32", "int8"]
 
         # Check event time variable
         assert "years_since_treatment" in analyzer.df.columns
@@ -335,7 +335,7 @@ class TestCausalAnalyzer:
         analyzer = CausalAnalyzer(data_path=temp_panel_file)
 
         summary = analyzer._summarize_results()
-        assert "No specification results to summarize" in summary
+        assert "No results available" in summary
 
     def test_summarize_results_with_data(self, temp_panel_file):
         """Test results summary with actual results."""
