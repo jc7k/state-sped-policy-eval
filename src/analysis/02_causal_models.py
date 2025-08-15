@@ -22,7 +22,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -156,7 +155,7 @@ class CausalAnalyzer:
 
                 # First fit without clustering
                 model = smf.ols(formula, data=self.df).fit()
-                
+
                 # Then apply cluster-robust standard errors using the numeric state_id
                 try:
                     model_clustered = smf.ols(formula, data=self.df).fit(
@@ -221,10 +220,7 @@ class CausalAnalyzer:
                 event_vars = []
                 for t in range(-5, 6):
                     if t != -1:  # Skip reference period
-                        if t < 0:
-                            var_name = f"event_tm{abs(t)}"
-                        else:
-                            var_name = f"event_tp{t}"
+                        var_name = f"event_tm{abs(t)}" if t < 0 else f"event_tp{t}"
                         if var_name in df_event.columns:
                             event_vars.append(var_name)
 
@@ -232,9 +228,7 @@ class CausalAnalyzer:
                     print(f"  No event time variables for {outcome}")
                     continue
 
-                formula = (
-                    f"{outcome} ~ " + " + ".join(event_vars) + " + C(state) + C(year)"
-                )
+                formula = f"{outcome} ~ " + " + ".join(event_vars) + " + C(state) + C(year)"
 
                 # Fit model with error handling for clustering
                 try:
@@ -255,11 +249,8 @@ class CausalAnalyzer:
                         event_ses[t] = 0
                         event_pvals[t] = np.nan
                     else:
-                        if t < 0:
-                            var_name = f"event_tm{abs(t)}"
-                        else:
-                            var_name = f"event_tp{t}"
-                            
+                        var_name = f"event_tm{abs(t)}" if t < 0 else f"event_tp{t}"
+
                         if var_name in model.params.index:
                             event_coefs[t] = model.params[var_name]
                             event_ses[t] = model.bse[var_name]
@@ -376,7 +367,7 @@ class CausalAnalyzer:
 
                     # Calculate p-value using t-distribution
                     t_stat = overall_att / overall_se if overall_se > 0 else 0
-                    overall_pvalue = 2 * (1 - stats.t.cdf(abs(t_stat), df=len(cohort_results)-1))
+                    overall_pvalue = 2 * (1 - stats.t.cdf(abs(t_stat), df=len(cohort_results) - 1))
 
                     cs_results[outcome] = {
                         "overall_att": overall_att,
@@ -449,16 +440,18 @@ class CausalAnalyzer:
                 # Use linearmodels for IV estimation instead of statsmodels
                 try:
                     from linearmodels.iv import IV2SLS
-                    
+
                     # Add constant and fixed effects using formula approach
-                    formula = f"{outcome} ~ 1 + [{endogenous_var} ~ {instrument}] + C(state) + C(year)"
-                    iv_model = IV2SLS.from_formula(formula, data=iv_data).fit(cov_type='robust')
-                    
+                    formula = (
+                        f"{outcome} ~ 1 + [{endogenous_var} ~ {instrument}] + C(state) + C(year)"
+                    )
+                    iv_model = IV2SLS.from_formula(formula, data=iv_data).fit(cov_type="robust")
+
                     # Extract coefficient for endogenous variable
                     coef = iv_model.params[endogenous_var]
                     se = iv_model.std_errors[endogenous_var]
                     pval = iv_model.pvalues[endogenous_var]
-                    
+
                     # First stage for diagnostics
                     first_stage = smf.ols(
                         f"{endogenous_var} ~ {instrument} + C(state) + C(year)", data=iv_data
@@ -476,26 +469,26 @@ class CausalAnalyzer:
                     }
 
                     print(f"  {outcome}: IV coef={coef:.4f}, F-stat={first_stage_f:.2f}")
-                    
+
                 except ImportError:
                     # Fall back to basic 2SLS if linearmodels not available
                     print(f"  Warning: linearmodels not available, using basic 2SLS for {outcome}")
-                    
+
                     # Manual 2SLS: First stage
                     first_stage = smf.ols(
                         f"{endogenous_var} ~ {instrument} + C(state) + C(year)", data=iv_data
                     ).fit()
-                    
+
                     # Get predicted values
                     iv_data_pred = iv_data.copy()
                     iv_data_pred[f"{endogenous_var}_predicted"] = first_stage.fittedvalues
-                    
+
                     # Second stage
                     second_stage = smf.ols(
-                        f"{outcome} ~ {endogenous_var}_predicted + C(state) + C(year)", 
-                        data=iv_data_pred
-                    ).fit(cov_type='HC0')
-                    
+                        f"{outcome} ~ {endogenous_var}_predicted + C(state) + C(year)",
+                        data=iv_data_pred,
+                    ).fit(cov_type="HC0")
+
                     iv_results[outcome] = {
                         "coefficient": second_stage.params[f"{endogenous_var}_predicted"],
                         "se": second_stage.bse[f"{endogenous_var}_predicted"],
@@ -506,7 +499,9 @@ class CausalAnalyzer:
                         "endogenous_var": endogenous_var,
                     }
 
-                    print(f"  {outcome}: IV coef (manual)={second_stage.params[f'{endogenous_var}_predicted']:.4f}")
+                    print(
+                        f"  {outcome}: IV coef (manual)={second_stage.params[f'{endogenous_var}_predicted']:.4f}"
+                    )
 
             except Exception as e:
                 print(f"  Error with {outcome}: {e}")
@@ -518,29 +513,29 @@ class CausalAnalyzer:
     def run_covid_analysis(self) -> dict[str, Any]:
         """
         Run COVID triple-difference analysis.
-        
+
         Triple-difference specification:
         Y_st = β₁(Post-treatment) + β₂(COVID) + β₃(Post-treatment × COVID) + αₛ + γₜ + εₛₜ
-        
+
         Returns:
             Dictionary of COVID analysis results
         """
         print("Running COVID triple-difference analysis...")
-        
+
         covid_results = {}
-        
+
         # Create COVID period indicator (2020-2022)
         if "post_covid" not in self.df.columns:
             self.df["post_covid"] = (self.df["year"] >= 2020).astype(int)
-        
+
         for outcome in self.outcome_vars:
             if outcome not in self.df.columns:
                 continue
-                
+
             try:
                 # Triple-difference specification
                 formula = f"{outcome} ~ post_treatment + post_covid + post_treatment:post_covid + C(state) + C(year)"
-                
+
                 # Fit model with robust standard errors
                 try:
                     model = smf.ols(formula, data=self.df).fit(
@@ -548,7 +543,7 @@ class CausalAnalyzer:
                     )
                 except:
                     model = smf.ols(formula, data=self.df).fit(cov_type="HC0")
-                
+
                 # Extract key coefficients
                 covid_results[outcome] = {
                     "treatment_effect": model.params.get("post_treatment", np.nan),
@@ -559,43 +554,50 @@ class CausalAnalyzer:
                     "covid_pval": model.pvalues.get("post_covid", np.nan),
                     "covid_interaction": model.params.get("post_treatment:post_covid", np.nan),
                     "covid_interaction_se": model.bse.get("post_treatment:post_covid", np.nan),
-                    "covid_interaction_pval": model.pvalues.get("post_treatment:post_covid", np.nan),
+                    "covid_interaction_pval": model.pvalues.get(
+                        "post_treatment:post_covid", np.nan
+                    ),
                     "n_obs": int(model.nobs),
                     "r_squared": model.rsquared,
                     "model": model,
                 }
-                
-                print(f"  {outcome}: COVID interaction={model.params.get('post_treatment:post_covid', np.nan):.4f}")
-                
+
+                print(
+                    f"  {outcome}: COVID interaction={model.params.get('post_treatment:post_covid', np.nan):.4f}"
+                )
+
                 # Save detailed results
-                covid_results_df = pd.DataFrame({
-                    "coefficient": [
-                        covid_results[outcome]["treatment_effect"],
-                        covid_results[outcome]["covid_effect"], 
-                        covid_results[outcome]["covid_interaction"]
-                    ],
-                    "std_error": [
-                        covid_results[outcome]["treatment_se"],
-                        covid_results[outcome]["covid_se"],
-                        covid_results[outcome]["covid_interaction_se"]
-                    ],
-                    "p_value": [
-                        covid_results[outcome]["treatment_pval"],
-                        covid_results[outcome]["covid_pval"],
-                        covid_results[outcome]["covid_interaction_pval"]
-                    ]
-                }, index=["post_treatment", "post_covid", "treatment_x_covid"])
-                
+                covid_results_df = pd.DataFrame(
+                    {
+                        "coefficient": [
+                            covid_results[outcome]["treatment_effect"],
+                            covid_results[outcome]["covid_effect"],
+                            covid_results[outcome]["covid_interaction"],
+                        ],
+                        "std_error": [
+                            covid_results[outcome]["treatment_se"],
+                            covid_results[outcome]["covid_se"],
+                            covid_results[outcome]["covid_interaction_se"],
+                        ],
+                        "p_value": [
+                            covid_results[outcome]["treatment_pval"],
+                            covid_results[outcome]["covid_pval"],
+                            covid_results[outcome]["covid_interaction_pval"],
+                        ],
+                    },
+                    index=["post_treatment", "post_covid", "treatment_x_covid"],
+                )
+
                 covid_results_df.to_csv(self.tables_dir / f"covid_ddd_results_{outcome}.csv")
-                
+
                 # Save model summary
                 with open(self.tables_dir / f"covid_ddd_model_summary_{outcome}.txt", "w") as f:
                     f.write(str(model.summary()))
-                    
+
             except Exception as e:
                 print(f"  Error with {outcome}: {e}")
                 continue
-                
+
         self.results["covid_analysis"] = covid_results
         return covid_results
 

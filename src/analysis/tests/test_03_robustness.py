@@ -590,5 +590,410 @@ class TestRobustnessAnalyzerIntegration:
             assert result is False
 
 
+class TestEnhancedStatisticalInference:
+    """Test Phase 3 Enhanced Statistical Inference methods."""
+
+    @pytest.fixture
+    def analyzer_with_results(self, temp_data_file):
+        """Fixture providing analyzer with mock robustness results."""
+        analyzer = RobustnessAnalyzer(data_path=temp_data_file)
+        analyzer.load_data()
+        
+        analyzer.robustness_results = {
+            "bootstrap_inference": {
+                "math_score": {
+                    "coefficient": -2.5,
+                    "std_error": 1.2,
+                    "p_value": 0.04,
+                    "ci_lower": -4.9,
+                    "ci_upper": -0.1,
+                    "bootstrap_coefficients": np.random.normal(-2.5, 1.2, 1000)
+                },
+                "reading_score": {
+                    "coefficient": 1.8,
+                    "std_error": 1.5,
+                    "p_value": 0.23,
+                    "ci_lower": -1.2,
+                    "ci_upper": 4.8,
+                    "bootstrap_coefficients": np.random.normal(1.8, 1.5, 1000)
+                }
+            },
+            "wild_cluster_bootstrap": {
+                "math_score": {
+                    "coefficient": -2.3,
+                    "std_error": 1.1,
+                    "p_value": 0.038,
+                    "ci_lower": -4.5,
+                    "ci_upper": -0.1
+                },
+                "reading_score": {
+                    "coefficient": 1.5,
+                    "std_error": 1.4,
+                    "p_value": 0.28,
+                    "ci_lower": -1.3,
+                    "ci_upper": 4.3
+                }
+            }
+        }
+        return analyzer
+
+    def test_multiple_testing_corrections(self, analyzer_with_results):
+        """Test multiple testing corrections implementation."""
+        results = analyzer_with_results.robustness_results
+        corrections = analyzer_with_results.multiple_testing_corrections(results)
+
+        # Check structure
+        assert "corrections" in corrections
+        assert "summary" in corrections
+
+        # Check summary statistics
+        summary = corrections["summary"]
+        assert "total_tests" in summary
+        assert "original_significant" in summary
+        assert "bonferroni_significant" in summary
+        assert "fdr_significant" in summary
+        assert "romano_wolf_significant" in summary
+
+        # Should have 4 total tests (2 methods × 2 outcomes)
+        assert summary["total_tests"] == 4
+
+        # Check that corrections are applied to each method/outcome
+        assert "bootstrap_inference" in corrections["corrections"]
+        assert "wild_cluster_bootstrap" in corrections["corrections"]
+
+        # Verify correction structure
+        bootstrap_corrections = corrections["corrections"]["bootstrap_inference"]
+        assert "math_score" in bootstrap_corrections
+        assert "reading_score" in bootstrap_corrections
+
+        # Check correction fields for specific outcome
+        math_corrections = bootstrap_corrections["math_score"]
+        required_fields = [
+            "original_p",
+            "bonferroni_p",
+            "fdr_p",
+            "romano_wolf_p",
+            "bonferroni_significant",
+            "fdr_significant",
+            "romano_wolf_significant",
+        ]
+        for field in required_fields:
+            assert field in math_corrections
+
+        # Bonferroni should be more conservative (higher p-values)
+        assert math_corrections["bonferroni_p"] >= math_corrections["original_p"]
+
+    def test_effect_size_calculations(self, analyzer_with_results):
+        """Test effect size calculations and standardization."""
+        results = analyzer_with_results.robustness_results
+        effect_sizes = analyzer_with_results.calculate_effect_sizes(results)
+
+        # Check structure for each method
+        assert "bootstrap_inference" in effect_sizes
+        assert "wild_cluster_bootstrap" in effect_sizes
+        assert "cross_method_summary" in effect_sizes
+
+        # Check bootstrap inference effect sizes
+        bootstrap_es = effect_sizes["bootstrap_inference"]
+        assert "math_score" in bootstrap_es
+        assert "reading_score" in bootstrap_es
+
+        # Verify effect size fields
+        math_es = bootstrap_es["math_score"]
+        required_fields = [
+            "cohens_d",
+            "interpretation",
+            "raw_coefficient",
+            "pooled_std",
+            "ci_lower_d",
+            "ci_upper_d",
+        ]
+        for field in required_fields:
+            assert field in math_es
+
+        # Check interpretation values
+        assert math_es["interpretation"] in ["negligible", "small", "medium", "large"]
+
+        # Verify cross-method summary
+        cross_summary = effect_sizes["cross_method_summary"]
+        if "math_score" in cross_summary:
+            math_cross = cross_summary["math_score"]
+            required_cross_fields = [
+                "mean_effect_size",
+                "std_effect_size",
+                "consistency_score",
+                "consistency_interpretation",
+                "n_methods",
+            ]
+            for field in required_cross_fields:
+                assert field in math_cross
+
+    def test_power_analysis(self, analyzer_with_results):
+        """Test power analysis and minimum detectable effects."""
+        results = analyzer_with_results.robustness_results
+        power_results = analyzer_with_results.power_analysis(results)
+
+        # Check overall structure
+        assert "sample_characteristics" in power_results
+        assert "overall_assessment" in power_results
+        assert "bootstrap_inference" in power_results
+
+        # Check sample characteristics
+        sample_chars = power_results["sample_characteristics"]
+        required_sample_fields = [
+            "total_observations",
+            "n_states",
+            "n_treated",
+            "n_control",
+            "treatment_proportion",
+        ]
+        for field in required_sample_fields:
+            assert field in sample_chars
+
+        # Check method-specific power results
+        bootstrap_power = power_results["bootstrap_inference"]
+        if "math_score" in bootstrap_power:
+            math_power = bootstrap_power["math_score"]
+            required_power_fields = [
+                "observed_power",
+                "minimum_detectable_effect",
+                "adequately_powered",
+                "power_interpretation",
+            ]
+            for field in required_power_fields:
+                assert field in math_power
+
+            # Power should be between 0 and 1
+            assert 0 <= math_power["observed_power"] <= 1
+
+            # MDE should be positive
+            assert math_power["minimum_detectable_effect"] > 0
+
+        # Check overall assessment
+        overall = power_results["overall_assessment"]
+        if "mean_power" in overall:
+            required_overall_fields = [
+                "mean_power",
+                "adequately_powered_proportion",
+                "recommendation",
+            ]
+            for field in required_overall_fields:
+                assert field in overall
+
+    def test_enhanced_confidence_intervals(self, analyzer_with_results):
+        """Test enhanced confidence interval methods."""
+        results = analyzer_with_results.robustness_results
+        enhanced_cis = analyzer_with_results.enhanced_confidence_intervals(results)
+
+        # Check structure
+        assert "bootstrap_inference" in enhanced_cis
+        assert "simultaneous_bands" in enhanced_cis
+
+        # Check bootstrap method CIs
+        bootstrap_cis = enhanced_cis["bootstrap_inference"]
+        if "math_score" in bootstrap_cis:
+            math_ci = bootstrap_cis["math_score"]
+
+            # Should have BCa CI since bootstrap samples are available
+            assert "bca_ci" in math_ci
+            bca = math_ci["bca_ci"]
+            assert "lower" in bca
+            assert "upper" in bca
+            assert "method" in bca
+
+            # Should have small sample adjustment
+            assert "small_sample_adjusted" in math_ci
+            small_sample = math_ci["small_sample_adjusted"]
+            assert "lower" in small_sample
+            assert "upper" in small_sample
+            assert "degrees_of_freedom" in small_sample
+
+        # Check simultaneous bands
+        sim_bands = enhanced_cis["simultaneous_bands"]
+        if "bootstrap_inference" in sim_bands:
+            bootstrap_bands = sim_bands["bootstrap_inference"]
+            if "math_score" in bootstrap_bands:
+                math_band = bootstrap_bands["math_score"]
+                required_band_fields = [
+                    "lower",
+                    "upper",
+                    "simultaneous_coverage",
+                    "individual_coverage",
+                    "adjustment_method",
+                ]
+                for field in required_band_fields:
+                    assert field in math_band
+
+    def test_bca_confidence_interval_calculation(self, analyzer_with_results):
+        """Test BCa confidence interval calculation specifically."""
+        # Test with known data
+        original_stat = 2.5
+        bootstrap_stats = np.random.normal(2.5, 0.5, 1000)
+        confidence_level = 0.95
+
+        bca_result = analyzer_with_results._calculate_bca_ci(
+            original_stat, bootstrap_stats, confidence_level
+        )
+
+        # Check structure
+        required_fields = ["lower", "upper", "method", "coverage_level"]
+        for field in required_fields:
+            assert field in bca_result
+
+        # Check logical constraints
+        assert bca_result["lower"] < bca_result["upper"]
+        assert bca_result["coverage_level"] == confidence_level
+        assert bca_result["method"] in ["BCa", "percentile (fallback)"]
+
+    def test_romano_wolf_correction(self, analyzer_with_results):
+        """Test Romano-Wolf stepdown correction."""
+        # Test with known p-values
+        p_values = np.array([0.01, 0.03, 0.05, 0.20])
+
+        corrected = analyzer_with_results._romano_wolf_correction(p_values, alpha=0.05)
+
+        # Check structure
+        assert len(corrected) == len(p_values)
+        assert all(0 <= p <= 1 for p in corrected)
+
+        # Should be more conservative than original
+        assert all(corrected >= p_values)
+
+    def test_cross_method_effect_size_comparison(self, analyzer_with_results):
+        """Test cross-method effect size comparison functionality."""
+        # Create effect sizes with known values for testing using actual outcome variables
+        effect_sizes = {
+            "method1": {
+                "math_grade8_gap": {"cohens_d": 0.3}, 
+                "reading_grade4_score": {"cohens_d": 0.1}
+            },
+            "method2": {
+                "math_grade8_gap": {"cohens_d": 0.35}, 
+                "reading_grade4_score": {"cohens_d": 0.15}
+            },
+        }
+
+        cross_comparison = analyzer_with_results._compare_effect_sizes(effect_sizes)
+
+        # Should have results for both outcomes
+        assert "math_grade8_gap" in cross_comparison
+        assert "reading_grade4_score" in cross_comparison
+
+        # Check math_grade8_gap comparison
+        math_comparison = cross_comparison["math_grade8_gap"]
+        required_fields = [
+            "mean_effect_size",
+            "std_effect_size",
+            "consistency_score",
+            "consistency_interpretation",
+            "n_methods",
+        ]
+        for field in required_fields:
+            assert field in math_comparison
+
+        # Values should be reasonable
+        assert abs(math_comparison["mean_effect_size"] - 0.325) < 0.01  # Mean of 0.3, 0.35
+        assert math_comparison["n_methods"] == 2
+
+    def test_power_calculation_for_outcome(self, analyzer_with_results):
+        """Test power calculation for individual outcomes."""
+        outcome_results = {"coefficient": 2.0, "std_error": 1.0}
+        n_states = 25
+        target_power = 0.8
+
+        power_result = analyzer_with_results._calculate_power_for_outcome(
+            outcome_results, n_states, target_power
+        )
+
+        # Check structure
+        required_fields = [
+            "observed_power",
+            "minimum_detectable_effect",
+            "adequately_powered",
+            "power_interpretation",
+        ]
+        for field in required_fields:
+            assert field in power_result
+
+        # Check values are reasonable
+        assert 0 <= power_result["observed_power"] <= 1
+        assert power_result["minimum_detectable_effect"] > 0
+        assert isinstance(power_result["adequately_powered"], bool)
+
+    def test_enhanced_inference_integration(self, analyzer_with_results):
+        """Test integration of all enhanced inference methods."""
+        results = analyzer_with_results.robustness_results
+
+        # Run all enhanced inference methods
+        corrections = analyzer_with_results.multiple_testing_corrections(results)
+        effect_sizes = analyzer_with_results.calculate_effect_sizes(results)
+        power_analysis = analyzer_with_results.power_analysis(results)
+        enhanced_cis = analyzer_with_results.enhanced_confidence_intervals(results)
+
+        # Add to results
+        analyzer_with_results.robustness_results.update(
+            {
+                "multiple_testing": corrections,
+                "effect_sizes": effect_sizes,
+                "power_analysis": power_analysis,
+                "enhanced_confidence_intervals": enhanced_cis,
+            }
+        )
+
+        # Test summary methods
+        enhanced_summary = analyzer_with_results._summarize_enhanced_inference()
+        enhanced_conclusion = analyzer_with_results._enhanced_inference_conclusion()
+
+        # Check that summaries are non-empty strings
+        assert isinstance(enhanced_summary, str)
+        assert len(enhanced_summary) > 0
+        assert isinstance(enhanced_conclusion, str)
+        assert len(enhanced_conclusion) > 0
+
+        # Should contain key information
+        assert "Multiple Testing" in enhanced_summary
+        assert "Effect Size" in enhanced_summary
+        assert "Power Analysis" in enhanced_summary
+
+    def test_enhanced_inference_error_handling(self, analyzer_with_results):
+        """Test error handling in enhanced inference methods."""
+        # Test with empty results
+        empty_results = {}
+
+        corrections = analyzer_with_results.multiple_testing_corrections(empty_results)
+        assert "corrections" in corrections
+        assert "summary" in corrections
+
+        effect_sizes = analyzer_with_results.calculate_effect_sizes(empty_results)
+        assert isinstance(effect_sizes, dict)
+
+        power_analysis = analyzer_with_results.power_analysis(empty_results)
+        assert isinstance(power_analysis, dict)
+
+        enhanced_cis = analyzer_with_results.enhanced_confidence_intervals(empty_results)
+        assert isinstance(enhanced_cis, dict)
+
+    def test_enhanced_inference_with_missing_data(self, analyzer_with_results):
+        """Test enhanced inference methods with missing data fields."""
+        # Results missing some expected fields
+        incomplete_results = {
+            "method1": {
+                "outcome1": {"coefficient": 1.5}  # Missing std_error, p_value, etc.
+            }
+        }
+
+        # Should handle gracefully without crashing
+        corrections = analyzer_with_results.multiple_testing_corrections(incomplete_results)
+        effect_sizes = analyzer_with_results.calculate_effect_sizes(incomplete_results)
+        power_analysis = analyzer_with_results.power_analysis(incomplete_results)
+        enhanced_cis = analyzer_with_results.enhanced_confidence_intervals(incomplete_results)
+
+        # All should return valid dictionaries
+        assert isinstance(corrections, dict)
+        assert isinstance(effect_sizes, dict)
+        assert isinstance(power_analysis, dict)
+        assert isinstance(enhanced_cis, dict)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
