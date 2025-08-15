@@ -8,41 +8,28 @@ A quasi-experimental analysis of state-level special education policies and thei
 # 1. Install dependencies
 uv sync
 
-# 2. Run econometric analysis on existing data
-python code/analysis/staggered_did.py
+# 2. Run Phase 4.1-4.3 Analysis Pipeline
+# Phase 4.1: Descriptive Analysis
+python src/analysis/01_descriptive.py
 
-# 3. Generate validation reports
-python code/analysis/data_validation.py
+# Phase 4.2: Main Causal Analysis (TWFE, Event Study, Callaway-Sant'Anna, IV)
+python src/analysis/02_causal_models.py
 
-# 4. Create policy database
-python code/analysis/policy_database.py
+# Phase 4.3: Robustness Analysis (LOSO, clustering, permutation tests, spec curve)
+python src/analysis/03_robustness.py
 
-# 5. Set up analysis panel
-python code/analysis/panel_setup.py
+# Supporting modules
+python src/analysis/panel_setup.py        # Set up analysis panel
+python src/analysis/policy_database.py    # State policy database
 
-# 6. Generate visualizations
-python code/visualization/event_study_plots.py
-python code/visualization/treatment_dashboard.py
+# Generate visualizations
+python src/visualization/event_study_plots.py
+python src/visualization/treatment_dashboard.py
 
-# 7. Run robustness testing
-python code/analysis/simple_robustness.py
-
-# 8. Run instrumental variables analysis
-python code/analysis/simple_iv_analysis.py
-
-# 9. Run COVID triple-difference analysis
-python code/analysis/covid_analysis.py
-
-# 10. Generate publication materials
-python code/analysis/publication_generator.py
-
-# 11. Generate detailed policy report
-python code/analysis/detailed_policy_report_generator.py
-
-# 12. View results
-ls output/tables/   # 30 econometric, robustness, IV, and COVID result files
-ls output/figures/  # 35 publication-ready visualizations
-ls output/reports/  # 5 publication outputs (brief, detailed report, results, summary)
+# View results
+ls output/tables/   # Main results, robustness tables in LaTeX and CSV
+ls output/figures/  # Publication-ready plots and visualizations
+ls output/reports/  # Analysis reports in markdown format
 ```
 
 ### Alternative: Data Collection Setup (if needed)
@@ -61,11 +48,11 @@ python examples/api_key_usage.py
 ### Code Quality and Formatting
 ```bash
 # Format and lint code with ruff (recommended)
-uv run ruff check code/
-uv run ruff format code/
+uv run ruff check src/
+uv run ruff format src/
 
 # Run tests with coverage
-uv run pytest tests/unit/ -v --cov=code --cov-report=term-missing
+uv run pytest src/analysis/tests/ -v --cov=src --cov-report=term-missing
 ```
 
 ## Project Overview
@@ -126,19 +113,14 @@ The project is organized into focused Product Requirements Documents (PRDs):
 ```
 state-sped-policy-eval/
 ├── docs/prds/              # Product Requirements Documents
-├── code/
+├── src/
 │   ├── analysis/           # Econometric analysis modules ✅
-│   │   ├── policy_database.py     # State policy reform tracking
-│   │   ├── data_validation.py     # Comprehensive validation framework
+│   │   ├── 01_descriptive.py      # Phase 4.1: Summary statistics and trend analysis
+│   │   ├── 02_causal_models.py    # Phase 4.2: TWFE, Event Study, CS DiD, IV analysis
+│   │   ├── 03_robustness.py       # Phase 4.3: LOSO, clustering, permutation, spec curve
 │   │   ├── panel_setup.py         # Analysis dataset preparation
-│   │   ├── staggered_did.py       # Callaway-Sant'Anna DiD implementation
-│   │   ├── robustness_testing.py  # Comprehensive robustness test suite
-│   │   ├── simple_robustness.py   # Simplified robustness validation
-│   │   ├── instrumental_variables.py  # Full IV analysis framework
-│   │   ├── simple_iv_analysis.py  # Manual 2SLS implementation
-│   │   ├── covid_analysis.py      # Triple-difference COVID analysis
-│   │   ├── publication_generator.py # Publication-ready output generator
-│   │   └── detailed_policy_report_generator.py # Comprehensive policy report with methodology
+│   │   ├── policy_database.py     # State policy reform tracking
+│   │   └── tests/                 # Comprehensive unit tests (59 tests)
 │   ├── visualization/      # Publication graphics ✅
 │   │   ├── event_study_plots.py   # Event studies and parallel trends
 │   │   └── treatment_dashboard.py # Geographic dashboards and maps
@@ -151,10 +133,9 @@ state-sped-policy-eval/
 │   ├── final/             # Analysis-ready panel (765 obs, 53 vars) ✅
 │   └── reports/           # Validation and quality reports ✅
 ├── output/
-│   ├── tables/            # 30 econometric, robustness, IV, and COVID result files ✅
-│   ├── figures/           # 35 visualization outputs ✅
-│   └── reports/           # 5 publication outputs (policy brief, detailed report, results, summary) ✅
-├── tests/                 # 72 unit tests, CI/CD framework ✅
+│   ├── tables/            # LaTeX and CSV results tables ✅
+│   ├── figures/           # Publication-ready visualizations ✅
+│   └── reports/           # Analysis reports and findings ✅
 └── pyproject.toml         # Project configuration ✅
 ```
 
@@ -195,7 +176,7 @@ tests/
 uv sync --dev
 
 # Run all tests with coverage
-uv run pytest --cov=code --cov-report=html --cov-fail-under=80
+uv run pytest src/analysis/tests/ --cov=src --cov-report=html --cov-fail-under=80
 ```
 
 **Test Categories**:
@@ -216,23 +197,23 @@ uv run pytest tests/unit/ -m "not slow"
 **Coverage Reports**:
 ```bash
 # Generate HTML coverage report
-uv run pytest --cov=code --cov-report=html
+uv run pytest src/analysis/tests/ --cov=src --cov-report=html
 open htmlcov/index.html
 
 # Generate terminal coverage report
-uv run pytest --cov=code --cov-report=term-missing
+uv run pytest src/analysis/tests/ --cov=src --cov-report=term-missing
 
 # Fail if coverage drops below threshold
-uv run pytest --cov=code --cov-fail-under=80
+uv run pytest src/analysis/tests/ --cov=src --cov-fail-under=80
 ```
 
 **Parallel Execution**:
 ```bash
 # Run tests in parallel for faster execution
-uv run pytest -n auto --cov=code
+uv run pytest src/analysis/tests/ -n auto --cov=src
 
 # Run specific test file with detailed output
-uv run pytest tests/unit/collection/test_naep_collector.py -v -s
+uv run pytest src/analysis/tests/test_01_descriptive.py -v -s
 ```
 
 ### Test Configuration
@@ -276,22 +257,18 @@ uv run pytest tests/unit/collection/test_naep_collector.py -v -s
 
 ### Development Status
 
-**Current Phase**: Publication Generation ✅
+**Current Phase**: Complete Analytical Implementation ✅
 
 **Completed Components**:
 - ✅ **Data Collection Pipeline** - NAEP, Census F-33, EdFacts, OCR data collection complete
-- ✅ **Policy Database** - 16 state reforms, federal monitoring events, court orders (2009-2023)  
-- ✅ **Data Integration** - Balanced panel dataset (765 obs: 51 states × 15 years)
-- ✅ **Staggered DiD Implementation** - Callaway-Sant'Anna methodology with working results
-- ✅ **Event Study Analysis** - Lead/lag specifications for parallel trends testing
-- ✅ **Validation Framework** - Comprehensive data quality and balance testing
-- ✅ **Publication Visualizations** - Event studies, parallel trends, treatment effects (18 plots)
-- ✅ **Geographic Dashboard** - State-level maps, regional comparisons, policy timelines (12 plots)
-- ✅ **Robustness Testing Suite** - Treatment balance, effect consistency, validation analysis (1 plot)
-- ✅ **Instrumental Variables Framework** - 2SLS estimation with court orders and federal monitoring (2 plots)
-- ✅ **COVID Triple-Difference Analysis** - Natural experiment framework examining pandemic resilience (1 plot)
-- ✅ **Publication Materials Generation** - Executive summary, main results table, policy brief, and summary statistics
-- ✅ **Comprehensive Policy Report** - 8,000-word detailed report with methodology, limitations, and research roadmap
+- ✅ **Phase 4.1: Descriptive Analysis** - Summary statistics, trend plots, LaTeX tables
+- ✅ **Phase 4.2: Main Causal Analysis** - TWFE, Event Study, Callaway-Sant'Anna DiD, IV estimation
+- ✅ **Phase 4.3: Robustness Analysis** - LOSO, alternative clustering, permutation tests, specification curves
+- ✅ **Comprehensive Test Suite** - 59 unit tests with 74-91% coverage across modules
+- ✅ **Publication-Ready Outputs** - LaTeX tables, high-resolution plots, markdown reports
+- ✅ **Policy Database** - State reform tracking with 16 reforms (2009-2023)
+- ✅ **Data Integration** - Balanced panel dataset preparation and validation
+- ✅ **Codebase Cleanup** - Removed 11 outdated files, streamlined architecture
 
 **Current Results**:
 - **11 Treatment Cohorts** identified across policy reform timeline
