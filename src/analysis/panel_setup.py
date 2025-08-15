@@ -420,6 +420,8 @@ if __name__ == "__main__":
     # Create analysis panel
     processor = PanelDataProcessor()
 
+    # Create the 01_descriptive.py module
+
     # Create final panel
     output_file = processor.create_analysis_panel()
 
