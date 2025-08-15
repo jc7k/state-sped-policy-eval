@@ -186,7 +186,8 @@ class NAEPDataCollector(APIBasedCollector):
 
     def _convert_state_name_to_code(self, state_name: str) -> str | None:
         """
-        Convert state names to two-letter codes
+        Convert state names to two-letter codes using centralized StateUtils.
+        DEPRECATED: Use state_utils.normalize_state_identifier() for new code.
 
         Args:
             state_name: Full state name from API
@@ -194,7 +195,7 @@ class NAEPDataCollector(APIBasedCollector):
         Returns:
             Two-letter state code or None if not found
         """
-        return self.state_utils.name_to_abbrev(state_name)
+        return self.state_utils.normalize_state_identifier(state_name)
 
     def validate_data(self, df: pd.DataFrame) -> dict:
         """

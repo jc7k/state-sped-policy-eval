@@ -227,7 +227,7 @@ class CensusEducationFinance(APIBasedCollector):
 
     def _convert_state_name_to_code(self, state_name: str) -> str | None:
         """
-        Convert state names to two-letter codes
+        Convert state names to two-letter codes using centralized StateUtils.
 
         Args:
             state_name: Full state name from API
@@ -235,62 +235,7 @@ class CensusEducationFinance(APIBasedCollector):
         Returns:
             Two-letter state code or None if not found
         """
-
-        state_mapping = {
-            "Alabama": "AL",
-            "Alaska": "AK",
-            "Arizona": "AZ",
-            "Arkansas": "AR",
-            "California": "CA",
-            "Colorado": "CO",
-            "Connecticut": "CT",
-            "Delaware": "DE",
-            "Florida": "FL",
-            "Georgia": "GA",
-            "Hawaii": "HI",
-            "Idaho": "ID",
-            "Illinois": "IL",
-            "Indiana": "IN",
-            "Iowa": "IA",
-            "Kansas": "KS",
-            "Kentucky": "KY",
-            "Louisiana": "LA",
-            "Maine": "ME",
-            "Maryland": "MD",
-            "Massachusetts": "MA",
-            "Michigan": "MI",
-            "Minnesota": "MN",
-            "Mississippi": "MS",
-            "Missouri": "MO",
-            "Montana": "MT",
-            "Nebraska": "NE",
-            "Nevada": "NV",
-            "New Hampshire": "NH",
-            "New Jersey": "NJ",
-            "New Mexico": "NM",
-            "New York": "NY",
-            "North Carolina": "NC",
-            "North Dakota": "ND",
-            "Ohio": "OH",
-            "Oklahoma": "OK",
-            "Oregon": "OR",
-            "Pennsylvania": "PA",
-            "Rhode Island": "RI",
-            "South Carolina": "SC",
-            "South Dakota": "SD",
-            "Tennessee": "TN",
-            "Texas": "TX",
-            "Utah": "UT",
-            "Vermont": "VT",
-            "Virginia": "VA",
-            "Washington": "WA",
-            "West Virginia": "WV",
-            "Wisconsin": "WI",
-            "Wyoming": "WY",
-            "District of Columbia": "DC",
-        }
-
-        return state_mapping.get(state_name.strip() if state_name else None)
+        return self.state_utils.name_to_abbrev(state_name)
 
     def validate_data(self, df: pd.DataFrame) -> dict:
         """

@@ -1,0 +1,94 @@
+{
+  "result": [
+    {
+      "jurisLabel": "Alabama", 
+      "jurisdiction": "AL",
+      "varValue": "1",
+      "varValueLabel": "Identified as students with disabilities",
+      "value": "245",
+      "errorFlag": "3.2",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "Alabama",
+      "jurisdiction": "AL", 
+      "varValue": "2",
+      "varValueLabel": "Not identified as students with disabilities",
+      "value": "285",
+      "errorFlag": "2.1",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "California",
+      "jurisdiction": "CA",
+      "varValue": "1", 
+      "varValueLabel": "Identified as students with disabilities",
+      "value": "252",
+      "errorFlag": "2.8",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "California",
+      "jurisdiction": "CA",
+      "varValue": "2",
+      "varValueLabel": "Not identified as students with disabilities", 
+      "value": "292",
+      "errorFlag": "1.9",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "Texas",
+      "jurisdiction": "TX",
+      "varValue": "1",
+      "varValueLabel": "Identified as students with disabilities",
+      "value": "248", 
+      "errorFlag": "2.5",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "Texas",
+      "jurisdiction": "TX",
+      "varValue": "2",
+      "varValueLabel": "Not identified as students with disabilities",
+      "value": "289",
+      "errorFlag": "1.7", 
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "District of Columbia",
+      "jurisdiction": "DC",
+      "varValue": "1",
+      "varValueLabel": "Identified as students with disabilities",
+      "value": "238",
+      "errorFlag": "4.1",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "District of Columbia", 
+      "jurisdiction": "DC",
+      "varValue": "2",
+      "varValueLabel": "Not identified as students with disabilities",
+      "value": "276",
+      "errorFlag": "3.2",
+      "isStatDisplayable": 1
+    },
+    {
+      "jurisLabel": "Vermont",
+      "jurisdiction": "VT",
+      "varValue": "1",
+      "varValueLabel": "Identified as students with disabilities",
+      "value": "‡",
+      "errorFlag": "N/A",
+      "isStatDisplayable": 0
+    },
+    {
+      "jurisLabel": "Vermont",
+      "jurisdiction": "VT", 
+      "varValue": "2",
+      "varValueLabel": "Not identified as students with disabilities",
+      "value": "290",
+      "errorFlag": "2.3",
+      "isStatDisplayable": 1
+    }
+  ]
+}
