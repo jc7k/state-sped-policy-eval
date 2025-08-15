@@ -1,0 +1,29 @@
+{
+  "project": "Special Education State Policy Analysis",
+  "author": "Jeff Chen",
+  "email": "jeffreyc1@alumni.cmu.edu",
+  "created_with": "Claude Code",
+  "version": "1.0",
+  "date": "2024",
+  "data_sources": [
+    "NAEP",
+    "EdFacts",
+    "Census F-33",
+    "OCR"
+  ],
+  "methods": [
+    "Two-Way Fixed Effects",
+    "Event Study",
+    "Callaway-Sant'Anna DiD",
+    "Instrumental Variables",
+    "Bootstrap Inference",
+    "Wild Cluster Bootstrap"
+  ],
+  "software": {
+    "python": "3.12",
+    "pandas": "2.0+",
+    "statsmodels": "0.14+",
+    "linearmodels": "5.0+"
+  },
+  "repository": "https://github.com/user/state-sped-policy-eval"
+}

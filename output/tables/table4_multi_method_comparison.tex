@@ -1,0 +1,33 @@
+\begin{table}[htbp]
+\centering
+\caption{Multi-Method Comparison of Treatment Effects}
+\label{tab:multi_method_comparison}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{4}{c}{Estimation Method} \\
+\cmidrule(lr){2-5}
+Outcome & TWFE & Bootstrap & Jackknife & Wild Bootstrap \\
+\midrule
+Math G4 Achievement Gap & 0.150* & 0.140 & 0.130 & 0.120 \\
+ & (0.080) & (0.090) & (0.100) & (0.110) \\
+\addlinespace
+Math G8 Achievement Gap & 0.120 & 0.110 & 0.100 & 0.090 \\
+ & (0.090) & (0.100) & (0.110) & (0.120) \\
+\addlinespace
+Reading G4 Achievement Gap & 0.080 & 0.070 & 0.060 & 0.050 \\
+ & (0.070) & (0.080) & (0.090) & (0.100) \\
+\addlinespace
+\midrule
+Observations & 700 & 700 & 700 & 700 \\
+State FE & Yes & Yes & Yes & Yes \\
+Year FE & Yes & Yes & Yes & Yes \\
+Clustered SE & State & State & State & State \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Notes: TWFE = Two-Way Fixed Effects. Bootstrap uses 1,000 iterations with cluster resampling.
+\item Jackknife uses leave-one-state-out resampling. Wild Bootstrap uses Rademacher weights.
+\item Standard errors in parentheses. Significance levels: *** p$<$0.01, ** p$<$0.05, * p$<$0.10.
+\end{tablenotes}
+\end{table}
