@@ -1,4 +1,4 @@
 outcome,cluster_robust_se,permutation_pvalue
-math_grade4_swd_score,1.2922085262951717,0.872
-math_grade4_non_swd_score,0.7285831611688233,0.436
-math_grade4_gap,1.0969930488862776,0.524
+math_grade4_swd_score,1.2922085262951717,0.904
+math_grade4_non_swd_score,0.7285831611688233,0.41
+math_grade4_gap,1.0969930488862776,0.51
