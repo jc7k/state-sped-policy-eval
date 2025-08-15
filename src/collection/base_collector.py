@@ -45,11 +45,11 @@ class BaseDataCollector(ABC):
 
         # Initialize API client with rate limiting
         self.rate_limit_delay = rate_limit_delay or self._get_default_rate_limit()
-        self.api_client = APIClient(rate_limit_delay=self.rate_limit_delay)
+        self.api_client = APIClient(api_name=self.__class__.__name__.lower())
 
         # Initialize utilities
         self.state_utils = StateUtils()
-        self.validator = DataValidator()
+        self.validator = DataValidator(self.state_utils)
         self.file_utils = FileUtils()
 
         # Storage for collected data

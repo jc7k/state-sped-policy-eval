@@ -1,4 +1,4 @@
-,math_grade8_swd_score_mean,math_grade8_swd_score_std,math_grade8_swd_score_count,math_grade4_gap_mean,math_grade4_gap_std,math_grade4_gap_count,total_revenue_per_pupil_mean,total_revenue_per_pupil_std,total_revenue_per_pupil_count,time_trend_mean,time_trend_std,time_trend_count,post_covid_mean,post_covid_std,post_covid_count
-0,243.761,7.285,118.0,31.378,5.085,118.0,10287390.548,13092469.696,115.0,6.451,4.236,672.0,0.217,0.413,672.0
-1,243.028,6.635,32.0,30.607,3.934,32.0,30245577.947,26347106.46,38.0,10.968,2.5,93.0,0.624,0.487,93.0
-difference,-0.7330000000000041,,,-0.7710000000000008,,,19958187.399,,,4.517,,,0.40700000000000003,,
+,mathematics_grade8_swd_score_mean,mathematics_grade8_swd_score_std,mathematics_grade8_swd_score_count,mathematics_grade4_gap_mean,mathematics_grade4_gap_std,mathematics_grade4_gap_count,total_revenue_mean,total_revenue_std,total_revenue_count,time_trend_mean,time_trend_std,time_trend_count,post_covid_mean,post_covid_std,post_covid_count
+0,243.474,7.139,117.0,31.765,4.712,117.0,9690239265.487,12648242025.705,113.0,6.019,3.932,638.0,0.171,0.377,638.0
+1,244.068,7.216,33.0,29.261,4.944,33.0,30934620950.0,25495951624.37,40.0,10.539,2.212,76.0,0.579,0.497,76.0
+difference,0.5940000000000225,,,-2.5040000000000013,,,21244381684.513,,,4.52,,,0.4079999999999999,,
