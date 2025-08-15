@@ -1,2 +1,0 @@
-outcome,ols_coefficient,ols_std_error,ols_pvalue,iv_coefficient,iv_std_error,iv_pvalue,coefficient_difference,hausman_pvalue,endogeneity_detected
-math_grade4_gap,-0.7708316730052932,0.8486734288208676,0.36373119579864466,,,,,,False

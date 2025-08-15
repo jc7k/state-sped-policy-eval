@@ -1,5 +1,0 @@
-Outcome,DiD_Effect,DiD_SE,DiD_P,IV_Effect,IV_SE,IV_P,COVID_Effect,COVID_SE,COVID_P
-Math Grade 4,0.054,inf,,-1.924,2.596,0.460,-1.877,1.58,0.235
-Math Grade 8,0.564,inf,,4.126,2.77,0.138,0.063,1.634,0.969
-Reading Grade 4,-1.15,inf,,-5.826,3.581,0.106,-1.846,1.902,0.332
-Reading Grade 8,0.773,inf,,-3.709,3.01,0.220,0.754,1.363,0.580

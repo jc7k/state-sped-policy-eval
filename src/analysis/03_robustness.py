@@ -49,10 +49,12 @@ class RobustnessAnalyzer:
         self.output_dir = Path("output")
         self.tables_dir = self.output_dir / "tables"
         self.figures_dir = self.output_dir / "figures"
+        self.reports_dir = self.output_dir / "reports"
 
         # Create output directories
         self.tables_dir.mkdir(parents=True, exist_ok=True)
         self.figures_dir.mkdir(parents=True, exist_ok=True)
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
 
     def load_data(self) -> None:
         """Load and prepare data for robustness analysis."""
@@ -761,7 +763,7 @@ Spec. Curve shows coefficient range across specifications.
         self.create_robustness_plots()
 
         # Generate report
-        report_path = self.output_dir / "robustness_analysis_report.md"
+        report_path = self.reports_dir / "robustness_analysis_report.md"
 
         with open(report_path, "w") as f:
             f.write(f"""# Phase 4.3: Robustness Analysis Report

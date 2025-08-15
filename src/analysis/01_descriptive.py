@@ -47,10 +47,12 @@ class DescriptiveAnalyzer:
         self.output_dir = Path("output")
         self.tables_dir = self.output_dir / "tables"
         self.figures_dir = self.output_dir / "figures"
+        self.reports_dir = self.output_dir / "reports"
 
         # Create output directories
         self.tables_dir.mkdir(parents=True, exist_ok=True)
         self.figures_dir.mkdir(parents=True, exist_ok=True)
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
 
     def load_data(self) -> None:
         """Load and validate analysis panel data."""
@@ -382,7 +384,7 @@ Standard deviations in parentheses.
         self.create_trend_figures()
 
         # Generate markdown report
-        report_path = self.output_dir / "descriptive_analysis_report.md"
+        report_path = self.reports_dir / "descriptive_analysis_report.md"
 
         with open(report_path, "w") as f:
             f.write(f"""# Phase 4.1: Descriptive Analysis Report

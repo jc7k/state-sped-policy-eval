@@ -21,6 +21,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
@@ -48,10 +49,12 @@ class CausalAnalyzer:
         self.output_dir = Path("output")
         self.tables_dir = self.output_dir / "tables"
         self.figures_dir = self.output_dir / "figures"
+        self.reports_dir = self.output_dir / "reports"
 
         # Create output directories
         self.tables_dir.mkdir(parents=True, exist_ok=True)
         self.figures_dir.mkdir(parents=True, exist_ok=True)
+        self.reports_dir.mkdir(parents=True, exist_ok=True)
 
     def load_data(self) -> None:
         """Load and prepare data for causal analysis."""
@@ -151,9 +154,18 @@ class CausalAnalyzer:
                 # Basic TWFE specification
                 formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
 
-                model = smf.ols(formula, data=self.df).fit(
-                    cov_type="cluster", cov_kwds={"groups": self.df["state"]}
-                )
+                # First fit without clustering
+                model = smf.ols(formula, data=self.df).fit()
+                
+                # Then apply cluster-robust standard errors using the numeric state_id
+                try:
+                    model_clustered = smf.ols(formula, data=self.df).fit(
+                        cov_type="cluster", cov_kwds={"groups": self.df["state_id"]}
+                    )
+                    model = model_clustered
+                except:
+                    # Fall back to robust standard errors if clustering fails
+                    model = smf.ols(formula, data=self.df).fit(cov_type="HC0")
 
                 twfe_results[outcome] = {
                     "coefficient": model.params["post_treatment"],
@@ -196,28 +208,41 @@ class CausalAnalyzer:
                 # Create event time indicators (-5 to +5 years)
                 df_event = self.df.copy()
 
-                # Create event time dummies
+                # Create event time dummies with valid variable names
                 for t in range(-5, 6):
                     if t != -1:  # Omit t=-1 as reference period
-                        df_event[f"event_t{t}"] = (df_event["years_since_treatment"] == t).astype(
-                            int
-                        )
+                        if t < 0:
+                            var_name = f"event_tm{abs(t)}"  # tm for "t minus"
+                        else:
+                            var_name = f"event_tp{t}"  # tp for "t plus"
+                        df_event[var_name] = (df_event["years_since_treatment"] == t).astype(int)
 
-                # Build formula
-                event_vars = [f"event_t{t}" for t in range(-5, 6) if t != -1]
-                available_event_vars = [var for var in event_vars if var in df_event.columns]
+                # Build formula with valid variable names
+                event_vars = []
+                for t in range(-5, 6):
+                    if t != -1:  # Skip reference period
+                        if t < 0:
+                            var_name = f"event_tm{abs(t)}"
+                        else:
+                            var_name = f"event_tp{t}"
+                        if var_name in df_event.columns:
+                            event_vars.append(var_name)
 
-                if not available_event_vars:
+                if not event_vars:
                     print(f"  No event time variables for {outcome}")
                     continue
 
                 formula = (
-                    f"{outcome} ~ " + " + ".join(available_event_vars) + " + C(state) + C(year)"
+                    f"{outcome} ~ " + " + ".join(event_vars) + " + C(state) + C(year)"
                 )
 
-                model = smf.ols(formula, data=df_event).fit(
-                    cov_type="cluster", cov_kwds={"groups": df_event["state"]}
-                )
+                # Fit model with error handling for clustering
+                try:
+                    model = smf.ols(formula, data=df_event).fit(
+                        cov_type="cluster", cov_kwds={"groups": df_event["state_id"]}
+                    )
+                except:
+                    model = smf.ols(formula, data=df_event).fit(cov_type="HC0")
 
                 # Extract event study coefficients
                 event_coefs = {}
@@ -230,7 +255,11 @@ class CausalAnalyzer:
                         event_ses[t] = 0
                         event_pvals[t] = np.nan
                     else:
-                        var_name = f"event_t{t}"
+                        if t < 0:
+                            var_name = f"event_tm{abs(t)}"
+                        else:
+                            var_name = f"event_tp{t}"
+                            
                         if var_name in model.params.index:
                             event_coefs[t] = model.params[var_name]
                             event_ses[t] = model.bse[var_name]
@@ -249,7 +278,7 @@ class CausalAnalyzer:
                     "model": model,
                 }
 
-                print(f"  {outcome}: Event study completed ({len(available_event_vars)} periods)")
+                print(f"  {outcome}: Event study completed ({len(event_vars)} periods)")
 
             except Exception as e:
                 print(f"  Error with {outcome}: {e}")
@@ -308,13 +337,22 @@ class CausalAnalyzer:
                         (cohort_data["treatment_year"] == cohort) & (cohort_data["year"] >= cohort)
                     ).astype(int)
 
+                    # Create state_id for clustering if not exists
+                    if "state_id" not in cohort_data.columns:
+                        cohort_data["state_id"] = pd.Categorical(cohort_data["state"]).codes
+
                     # Run TWFE for this cohort
                     formula = f"{outcome} ~ cohort_treated + C(state) + C(year)"
 
                     try:
-                        model = smf.ols(formula, data=cohort_data).fit(
-                            cov_type="cluster", cov_kwds={"groups": cohort_data["state"]}
-                        )
+                        # Try clustered standard errors first
+                        try:
+                            model = smf.ols(formula, data=cohort_data).fit(
+                                cov_type="cluster", cov_kwds={"groups": cohort_data["state_id"]}
+                            )
+                        except:
+                            # Fall back to robust standard errors
+                            model = smf.ols(formula, data=cohort_data).fit(cov_type="HC0")
 
                         cohort_results[cohort] = {
                             "att": model.params["cohort_treated"],
@@ -336,14 +374,14 @@ class CausalAnalyzer:
                     overall_att = np.mean(atts)
                     overall_se = np.sqrt(np.mean(np.array(ses) ** 2))  # Simplified SE
 
+                    # Calculate p-value using t-distribution
+                    t_stat = overall_att / overall_se if overall_se > 0 else 0
+                    overall_pvalue = 2 * (1 - stats.t.cdf(abs(t_stat), df=len(cohort_results)-1))
+
                     cs_results[outcome] = {
                         "overall_att": overall_att,
                         "overall_se": overall_se,
-                        "overall_pvalue": 2
-                        * (
-                            1
-                            - sm.stats.stattools.durbin_watson(np.array([overall_att / overall_se]))
-                        ),
+                        "overall_pvalue": overall_pvalue,
                         "cohort_results": cohort_results,
                         "n_cohorts": len(cohort_results),
                     }
@@ -408,42 +446,67 @@ class CausalAnalyzer:
                     print(f"  No valid data for {outcome}")
                     continue
 
-                # Add state and year dummies
-                state_dummies = pd.get_dummies(iv_data["state"], prefix="state")
-                year_dummies = pd.get_dummies(iv_data["year"], prefix="year")
+                # Use linearmodels for IV estimation instead of statsmodels
+                try:
+                    from linearmodels.iv import IV2SLS
+                    
+                    # Add constant and fixed effects using formula approach
+                    formula = f"{outcome} ~ 1 + [{endogenous_var} ~ {instrument}] + C(state) + C(year)"
+                    iv_model = IV2SLS.from_formula(formula, data=iv_data).fit(cov_type='robust')
+                    
+                    # Extract coefficient for endogenous variable
+                    coef = iv_model.params[endogenous_var]
+                    se = iv_model.std_errors[endogenous_var]
+                    pval = iv_model.pvalues[endogenous_var]
+                    
+                    # First stage for diagnostics
+                    first_stage = smf.ols(
+                        f"{endogenous_var} ~ {instrument} + C(state) + C(year)", data=iv_data
+                    ).fit()
+                    first_stage_f = first_stage.fvalue
 
-                # Drop one category to avoid perfect collinearity
-                state_dummies = state_dummies.iloc[:, 1:]
-                year_dummies = year_dummies.iloc[:, 1:]
+                    iv_results[outcome] = {
+                        "coefficient": coef,
+                        "se": se,
+                        "p_value": pval,
+                        "first_stage_f": first_stage_f,
+                        "n_obs": int(len(iv_data)),
+                        "instrument": instrument,
+                        "endogenous_var": endogenous_var,
+                    }
 
-                # Combine exogenous variables
-                exog = pd.concat([state_dummies, year_dummies], axis=1)
+                    print(f"  {outcome}: IV coef={coef:.4f}, F-stat={first_stage_f:.2f}")
+                    
+                except ImportError:
+                    # Fall back to basic 2SLS if linearmodels not available
+                    print(f"  Warning: linearmodels not available, using basic 2SLS for {outcome}")
+                    
+                    # Manual 2SLS: First stage
+                    first_stage = smf.ols(
+                        f"{endogenous_var} ~ {instrument} + C(state) + C(year)", data=iv_data
+                    ).fit()
+                    
+                    # Get predicted values
+                    iv_data_pred = iv_data.copy()
+                    iv_data_pred[f"{endogenous_var}_predicted"] = first_stage.fittedvalues
+                    
+                    # Second stage
+                    second_stage = smf.ols(
+                        f"{outcome} ~ {endogenous_var}_predicted + C(state) + C(year)", 
+                        data=iv_data_pred
+                    ).fit(cov_type='HC0')
+                    
+                    iv_results[outcome] = {
+                        "coefficient": second_stage.params[f"{endogenous_var}_predicted"],
+                        "se": second_stage.bse[f"{endogenous_var}_predicted"],
+                        "p_value": second_stage.pvalues[f"{endogenous_var}_predicted"],
+                        "first_stage_f": first_stage.fvalue,
+                        "n_obs": int(len(iv_data)),
+                        "instrument": instrument,
+                        "endogenous_var": endogenous_var,
+                    }
 
-                # Run 2SLS estimation
-                from statsmodels.sandbox.regression.gmm import IV2SLS
-
-                iv_model = IV2SLS(
-                    endog=iv_data[outcome], exog=exog, instrument=iv_data[[instrument]], data=None
-                ).fit()
-
-                # First stage for diagnostics
-                first_stage = smf.ols(
-                    f"{endogenous_var} ~ {instrument} + C(state) + C(year)", data=iv_data
-                ).fit()
-
-                first_stage_f = first_stage.fvalue
-
-                iv_results[outcome] = {
-                    "coefficient": iv_model.params[0] if len(iv_model.params) > 0 else np.nan,
-                    "se": iv_model.bse[0] if len(iv_model.bse) > 0 else np.nan,
-                    "p_value": iv_model.pvalues[0] if len(iv_model.pvalues) > 0 else np.nan,
-                    "first_stage_f": first_stage_f,
-                    "n_obs": int(len(iv_data)),
-                    "instrument": instrument,
-                    "endogenous_var": endogenous_var,
-                }
-
-                print(f"  {outcome}: IV coef={iv_model.params[0]:.4f}, F-stat={first_stage_f:.2f}")
+                    print(f"  {outcome}: IV coef (manual)={second_stage.params[f'{endogenous_var}_predicted']:.4f}")
 
             except Exception as e:
                 print(f"  Error with {outcome}: {e}")
@@ -451,6 +514,90 @@ class CausalAnalyzer:
 
         self.results["instrumental_variables"] = iv_results
         return iv_results
+
+    def run_covid_analysis(self) -> dict[str, Any]:
+        """
+        Run COVID triple-difference analysis.
+        
+        Triple-difference specification:
+        Y_st = β₁(Post-treatment) + β₂(COVID) + β₃(Post-treatment × COVID) + αₛ + γₜ + εₛₜ
+        
+        Returns:
+            Dictionary of COVID analysis results
+        """
+        print("Running COVID triple-difference analysis...")
+        
+        covid_results = {}
+        
+        # Create COVID period indicator (2020-2022)
+        if "post_covid" not in self.df.columns:
+            self.df["post_covid"] = (self.df["year"] >= 2020).astype(int)
+        
+        for outcome in self.outcome_vars:
+            if outcome not in self.df.columns:
+                continue
+                
+            try:
+                # Triple-difference specification
+                formula = f"{outcome} ~ post_treatment + post_covid + post_treatment:post_covid + C(state) + C(year)"
+                
+                # Fit model with robust standard errors
+                try:
+                    model = smf.ols(formula, data=self.df).fit(
+                        cov_type="cluster", cov_kwds={"groups": self.df["state_id"]}
+                    )
+                except:
+                    model = smf.ols(formula, data=self.df).fit(cov_type="HC0")
+                
+                # Extract key coefficients
+                covid_results[outcome] = {
+                    "treatment_effect": model.params.get("post_treatment", np.nan),
+                    "treatment_se": model.bse.get("post_treatment", np.nan),
+                    "treatment_pval": model.pvalues.get("post_treatment", np.nan),
+                    "covid_effect": model.params.get("post_covid", np.nan),
+                    "covid_se": model.bse.get("post_covid", np.nan),
+                    "covid_pval": model.pvalues.get("post_covid", np.nan),
+                    "covid_interaction": model.params.get("post_treatment:post_covid", np.nan),
+                    "covid_interaction_se": model.bse.get("post_treatment:post_covid", np.nan),
+                    "covid_interaction_pval": model.pvalues.get("post_treatment:post_covid", np.nan),
+                    "n_obs": int(model.nobs),
+                    "r_squared": model.rsquared,
+                    "model": model,
+                }
+                
+                print(f"  {outcome}: COVID interaction={model.params.get('post_treatment:post_covid', np.nan):.4f}")
+                
+                # Save detailed results
+                covid_results_df = pd.DataFrame({
+                    "coefficient": [
+                        covid_results[outcome]["treatment_effect"],
+                        covid_results[outcome]["covid_effect"], 
+                        covid_results[outcome]["covid_interaction"]
+                    ],
+                    "std_error": [
+                        covid_results[outcome]["treatment_se"],
+                        covid_results[outcome]["covid_se"],
+                        covid_results[outcome]["covid_interaction_se"]
+                    ],
+                    "p_value": [
+                        covid_results[outcome]["treatment_pval"],
+                        covid_results[outcome]["covid_pval"],
+                        covid_results[outcome]["covid_interaction_pval"]
+                    ]
+                }, index=["post_treatment", "post_covid", "treatment_x_covid"])
+                
+                covid_results_df.to_csv(self.tables_dir / f"covid_ddd_results_{outcome}.csv")
+                
+                # Save model summary
+                with open(self.tables_dir / f"covid_ddd_model_summary_{outcome}.txt", "w") as f:
+                    f.write(str(model.summary()))
+                    
+            except Exception as e:
+                print(f"  Error with {outcome}: {e}")
+                continue
+                
+        self.results["covid_analysis"] = covid_results
+        return covid_results
 
     def create_results_table(self) -> pd.DataFrame:
         """
@@ -648,13 +795,14 @@ All specifications include state and year fixed effects.
         self.run_event_study()
         self.run_callaway_santanna()
         self.run_instrumental_variables()
+        self.run_covid_analysis()  # Add COVID analysis to pipeline
 
         # Create outputs
         self.create_results_table()
         self.create_event_study_plots()
 
         # Generate report
-        report_path = self.output_dir / "causal_analysis_report.md"
+        report_path = self.reports_dir / "causal_analysis_report.md"
 
         with open(report_path, "w") as f:
             f.write(f"""# Phase 4.2: Main Causal Analysis Report
@@ -676,6 +824,7 @@ Date: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}
 2. **Event Study**: Dynamic treatment effects from -5 to +5 years
 3. **Callaway-Sant'Anna**: Manual implementation for staggered adoption
 4. **Instrumental Variables**: Using court orders as instruments
+5. **COVID Triple-Difference**: Policy resilience during pandemic disruption
 
 ## Key Results
 
@@ -686,6 +835,8 @@ Date: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}
 1. **Tables**:
    - `table2_main_results.csv` - Main results in CSV format
    - `table2_main_results.tex` - LaTeX formatted table
+   - `covid_ddd_results_*.csv` - COVID analysis results by outcome
+   - `covid_ddd_model_summary_*.txt` - COVID model summaries
 
 2. **Figures**:
    - Event study plots for each outcome variable
