@@ -18,11 +18,12 @@ Created in collaboration with Claude Code
 import random
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.stats
 import statsmodels.formula.api as smf
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -57,27 +58,64 @@ class RobustnessAnalyzer:
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 
     def load_data(self) -> None:
-        """Load and prepare data for robustness analysis."""
+        """Load and prepare data for robustness analysis with comprehensive validation."""
         try:
             self.df = pd.read_csv(self.data_path)
             print(f"Loaded analysis panel: {self.df.shape}")
-
+            
             # Validate required columns
             required_cols = ["state", "year", "post_treatment"]
             missing_cols = [col for col in required_cols if col not in self.df.columns]
             if missing_cols:
                 raise ValueError(f"Missing required columns: {missing_cols}")
-
+            
+            # Clean and validate data structure
+            self._validate_and_clean_data()
+            
             # Identify outcome variables
             self.outcome_vars = self._get_outcome_variables()
             print(f"Outcome variables for robustness: {self.outcome_vars}")
-
-            # Add census regions for alternative clustering
+            
+            # Add regional indicators using existing region column
             self._add_regional_indicators()
-
+            
         except Exception as e:
             print(f"Error loading data: {e}")
             raise
+
+    def _validate_and_clean_data(self) -> None:
+        """Validate and clean data structure to prevent clustering failures."""
+        print("  Validating and cleaning data structure...")
+        
+        # Check for missing values in key columns
+        key_cols = ["state", "year", "post_treatment"]
+        for col in key_cols:
+            missing_count = self.df[col].isna().sum()
+            if missing_count > 0:
+                print(f"    Warning: {missing_count} missing values in {col}")
+                if col == "post_treatment":
+                    self.df[col] = self.df[col].fillna(0)
+        
+        # Ensure state column is string type for proper grouping
+        self.df["state"] = self.df["state"].astype(str)
+        
+        # Clean year column
+        self.df["year"] = pd.to_numeric(self.df["year"], errors="coerce")
+        
+        # Remove any completely empty rows
+        initial_rows = len(self.df)
+        self.df = self.df.dropna(how="all")
+        removed_rows = initial_rows - len(self.df)
+        if removed_rows > 0:
+            print(f"    Removed {removed_rows} completely empty rows")
+        
+        # Reset index to ensure clean indexing
+        self.df = self.df.reset_index(drop=True)
+        
+        # Validate state coverage
+        n_states = self.df["state"].nunique()
+        n_years = self.df["year"].nunique()
+        print(f"    Data validation complete: {n_states} states, {n_years} years")
 
     def _get_outcome_variables(self) -> list[str]:
         """Identify main outcome variables for robustness analysis."""
@@ -101,47 +139,50 @@ class RobustnessAnalyzer:
 
     def _add_regional_indicators(self) -> None:
         """Add census region indicators for alternative clustering."""
-        # Census regions mapping
-        regions = {
-            "Northeast": ["CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA"],
-            "Midwest": ["IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD"],
-            "South": [
-                "DE",
-                "FL",
-                "GA",
-                "MD",
-                "NC",
-                "SC",
-                "VA",
-                "DC",
-                "WV",
-                "AL",
-                "KY",
-                "MS",
-                "TN",
-                "AR",
-                "LA",
-                "OK",
-                "TX",
-            ],
-            "West": ["AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA"],
-        }
+        # First, check if we already have a region column
+        if "region" in self.df.columns:
+            # Use existing region column, just standardize the name
+            self.df["census_region"] = self.df["region"]
+            print("  Using existing region column for clustering")
+        else:
+            # Create region mapping from state abbreviations
+            regions = {
+                "Northeast": ["CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA"],
+                "Midwest": ["IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD"],
+                "South": [
+                    "DE", "FL", "GA", "MD", "NC", "SC", "VA", "DC", "WV",
+                    "AL", "KY", "MS", "TN", "AR", "LA", "OK", "TX",
+                ],
+                "West": ["AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA"],
+            }
 
-        # Create reverse mapping
-        state_to_region = {}
-        for region, states in regions.items():
-            for state in states:
-                state_to_region[state] = region
+            # Create reverse mapping
+            state_to_region = {}
+            for region, states in regions.items():
+                for state in states:
+                    state_to_region[state] = region
 
-        # Add region column
-        self.df["census_region"] = self.df["state"].map(state_to_region)
+            # Add region column
+            self.df["census_region"] = self.df["state"].map(state_to_region)
+        
+        # Fill missing regions
         self.df["census_region"] = self.df["census_region"].fillna("Unknown")
-
-        print(f"Regional distribution: {self.df['census_region'].value_counts().to_dict()}")
+        
+        # Ensure census_region is string type for clustering
+        self.df["census_region"] = self.df["census_region"].astype(str)
+        
+        # Validate region distribution
+        region_counts = self.df["census_region"].value_counts().to_dict()
+        print(f"  Regional distribution: {region_counts}")
+        
+        # Warn about small regional clusters
+        small_regions = [region for region, count in region_counts.items() if count < 20]
+        if small_regions:
+            print(f"  Warning: Small regional clusters may cause issues: {small_regions}")
 
     def leave_one_state_out(self) -> dict[str, Any]:
         """
-        Leave-one-state-out robustness analysis.
+        Leave-one-state-out robustness analysis with improved error handling.
 
         Returns:
             Dictionary of LOSO results
@@ -166,11 +207,31 @@ class RobustnessAnalyzer:
                     if subset.empty or subset["post_treatment"].sum() == 0:
                         continue
 
-                    # Run basic TWFE model
+                    # Clean subset data for clustering
+                    subset = subset.dropna(subset=["state", "year", outcome, "post_treatment"])
+                    subset = subset.reset_index(drop=True)
+                    
+                    if len(subset) < 10:  # Need minimum observations
+                        continue
+
+                    # Try clustered standard errors first
                     formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
-                    model = smf.ols(formula, data=subset).fit(
-                        cov_type="cluster", cov_kwds={"groups": subset["state"]}
-                    )
+                    
+                    try:
+                        # Attempt state clustering
+                        unique_states = subset["state"].unique()
+                        if len(unique_states) >= 5:  # Need minimum clusters
+                            model = smf.ols(formula, data=subset).fit(
+                                cov_type="cluster", cov_kwds={"groups": subset["state"]}
+                            )
+                        else:
+                            # Fall back to robust standard errors
+                            model = smf.ols(formula, data=subset).fit(cov_type="HC1")
+                            
+                    except Exception as cluster_error:
+                        # Final fallback to OLS standard errors
+                        print(f"    Clustering failed for {state}, using OLS SEs: {cluster_error}")
+                        model = smf.ols(formula, data=subset).fit()
 
                     state_results[state] = {
                         "coefficient": model.params["post_treatment"],
@@ -197,14 +258,17 @@ class RobustnessAnalyzer:
                     "n_estimates": len(coeffs),
                 }
 
-                print(f"    {outcome}: Mean={np.mean(coeffs):.4f}, Std={np.std(coeffs):.4f}")
+                print(f"    {outcome}: {len(coeffs)} successful estimates, "
+                      f"Mean={np.mean(coeffs):.4f}, Std={np.std(coeffs):.4f}")
+            else:
+                print(f"    {outcome}: No successful LOSO estimates")
 
         self.robustness_results["leave_one_state_out"] = loso_results
         return loso_results
 
     def alternative_clustering(self) -> dict[str, Any]:
         """
-        Test robustness to alternative clustering strategies.
+        Test robustness to alternative clustering strategies with improved error handling.
 
         Returns:
             Dictionary of clustering results
@@ -220,61 +284,90 @@ class RobustnessAnalyzer:
             print(f"  Analyzing {outcome}...")
             cluster_specs = {}
 
-            # Baseline: State clustering
-            try:
-                formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
-                model_state = smf.ols(formula, data=self.df).fit(
-                    cov_type="cluster", cov_kwds={"groups": self.df["state"]}
-                )
+            # Clean data for this outcome
+            analysis_df = self.df.dropna(subset=["state", "year", outcome, "post_treatment"]).copy()
+            analysis_df = analysis_df.reset_index(drop=True)
+            
+            if len(analysis_df) < 20:
+                print(f"    Insufficient data for {outcome}: {len(analysis_df)} observations")
+                continue
 
-                cluster_specs["state"] = {
-                    "coefficient": model_state.params["post_treatment"],
-                    "se": model_state.bse["post_treatment"],
-                    "p_value": model_state.pvalues["post_treatment"],
-                }
+            formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
+
+            # 1. State clustering (baseline)
+            try:
+                unique_states = analysis_df["state"].unique()
+                if len(unique_states) >= 5:
+                    # Ensure state groups align with data
+                    state_groups = analysis_df["state"].values
+                    model_state = smf.ols(formula, data=analysis_df).fit(
+                        cov_type="cluster", cov_kwds={"groups": state_groups}
+                    )
+
+                    cluster_specs["state"] = {
+                        "coefficient": model_state.params["post_treatment"],
+                        "se": model_state.bse["post_treatment"],
+                        "p_value": model_state.pvalues["post_treatment"],
+                        "n_clusters": len(unique_states),
+                    }
+                else:
+                    print(f"    Too few states for clustering: {len(unique_states)}")
 
             except Exception as e:
                 print(f"    Error with state clustering: {e}")
 
-            # Alternative 1: Regional clustering
+            # 2. Regional clustering
             try:
-                model_region = smf.ols(formula, data=self.df).fit(
-                    cov_type="cluster", cov_kwds={"groups": self.df["census_region"]}
-                )
+                if "census_region" in analysis_df.columns:
+                    unique_regions = analysis_df["census_region"].unique()
+                    if len(unique_regions) >= 3:  # Need minimum clusters
+                        region_groups = analysis_df["census_region"].values
+                        model_region = smf.ols(formula, data=analysis_df).fit(
+                            cov_type="cluster", cov_kwds={"groups": region_groups}
+                        )
 
-                cluster_specs["region"] = {
-                    "coefficient": model_region.params["post_treatment"],
-                    "se": model_region.bse["post_treatment"],
-                    "p_value": model_region.pvalues["post_treatment"],
-                }
+                        cluster_specs["region"] = {
+                            "coefficient": model_region.params["post_treatment"],
+                            "se": model_region.bse["post_treatment"],
+                            "p_value": model_region.pvalues["post_treatment"],
+                            "n_clusters": len(unique_regions),
+                        }
+                    else:
+                        print(f"    Too few regions for clustering: {len(unique_regions)}")
 
             except Exception as e:
                 print(f"    Error with regional clustering: {e}")
 
-            # Alternative 2: Year clustering (if reasonable sample size)
+            # 3. Year clustering
             try:
-                if len(self.df["year"].unique()) > 10:
-                    model_year = smf.ols(formula, data=self.df).fit(
-                        cov_type="cluster", cov_kwds={"groups": self.df["year"]}
+                unique_years = analysis_df["year"].unique()
+                if len(unique_years) >= 5:  # Need minimum clusters
+                    year_groups = analysis_df["year"].values
+                    model_year = smf.ols(formula, data=analysis_df).fit(
+                        cov_type="cluster", cov_kwds={"groups": year_groups}
                     )
 
                     cluster_specs["year"] = {
                         "coefficient": model_year.params["post_treatment"],
                         "se": model_year.bse["post_treatment"],
                         "p_value": model_year.pvalues["post_treatment"],
+                        "n_clusters": len(unique_years),
                     }
+                else:
+                    print(f"    Too few years for clustering: {len(unique_years)}")
 
             except Exception as e:
                 print(f"    Error with year clustering: {e}")
 
-            # Alternative 3: Robust standard errors (no clustering)
+            # 4. Robust standard errors (always works as fallback)
             try:
-                model_robust = smf.ols(formula, data=self.df).fit(cov_type="HC1")
+                model_robust = smf.ols(formula, data=analysis_df).fit(cov_type="HC1")
 
                 cluster_specs["robust"] = {
                     "coefficient": model_robust.params["post_treatment"],
                     "se": model_robust.bse["post_treatment"],
                     "p_value": model_robust.pvalues["post_treatment"],
+                    "n_clusters": 0,  # No clustering
                 }
 
             except Exception as e:
@@ -286,9 +379,13 @@ class RobustnessAnalyzer:
                 # Print comparison
                 print(f"    Clustering comparison for {outcome}:")
                 for cluster_type, results in cluster_specs.items():
+                    n_clust = results.get("n_clusters", 0)
                     print(
-                        f"      {cluster_type}: β={results['coefficient']:.4f}, SE={results['se']:.4f}"
+                        f"      {cluster_type}: β={results['coefficient']:.4f}, SE={results['se']:.4f} "
+                        f"({n_clust} clusters)" if n_clust > 0 else f"      {cluster_type}: β={results['coefficient']:.4f}, SE={results['se']:.4f}"
                     )
+            else:
+                print(f"    No successful clustering methods for {outcome}")
 
         self.robustness_results["alternative_clustering"] = clustering_results
         return clustering_results
@@ -368,7 +465,7 @@ class RobustnessAnalyzer:
 
     def specification_curve(self) -> dict[str, Any]:
         """
-        Specification curve analysis.
+        Specification curve analysis with improved error handling.
 
         Returns:
             Dictionary of specification curve results
@@ -389,8 +486,8 @@ class RobustnessAnalyzer:
             ),
         ]
 
-        # Filter out empty control sets
-        control_sets = [controls for controls in control_sets if controls or controls == []]
+        # Filter out empty control sets (but keep the empty list for no-controls spec)
+        control_sets = [controls for controls in control_sets if isinstance(controls, list)]
 
         for outcome in self.outcome_vars:
             if outcome not in self.df.columns:
@@ -399,18 +496,43 @@ class RobustnessAnalyzer:
             print(f"  Analyzing {outcome}...")
             specifications = []
 
+            # Clean data for this outcome
+            analysis_df = self.df.dropna(subset=["state", "year", outcome, "post_treatment"]).copy()
+            analysis_df = analysis_df.reset_index(drop=True)
+            
+            if len(analysis_df) < 20:
+                print(f"    Insufficient data for {outcome}: {len(analysis_df)} observations")
+                continue
+
             for i, controls in enumerate(control_sets):
                 try:
                     # Build formula
                     formula = f"{outcome} ~ post_treatment"
                     if controls:
-                        formula += " + " + " + ".join(controls)
+                        # Verify controls exist in data
+                        available_controls = [c for c in controls if c in analysis_df.columns]
+                        if available_controls:
+                            formula += " + " + " + ".join(available_controls)
+                        else:
+                            print(f"    Specification {i}: No valid controls found")
+                            continue
                     formula += " + C(state) + C(year)"
 
-                    # Run model
-                    model = smf.ols(formula, data=self.df).fit(
-                        cov_type="cluster", cov_kwds={"groups": self.df["state"]}
-                    )
+                    # Run model with appropriate standard errors
+                    unique_states = analysis_df["state"].unique()
+                    if len(unique_states) >= 5:
+                        # Try clustered standard errors
+                        try:
+                            state_groups = analysis_df["state"].values
+                            model = smf.ols(formula, data=analysis_df).fit(
+                                cov_type="cluster", cov_kwds={"groups": state_groups}
+                            )
+                        except Exception:
+                            # Fall back to robust standard errors
+                            model = smf.ols(formula, data=analysis_df).fit(cov_type="HC1")
+                    else:
+                        # Use robust standard errors for small samples
+                        model = smf.ols(formula, data=analysis_df).fit(cov_type="HC1")
 
                     specifications.append(
                         {
@@ -443,9 +565,404 @@ class RobustnessAnalyzer:
                     f"    {outcome}: {len(spec_df)} specifications, "
                     f"{(spec_df['p_value'] < 0.05).sum()} significant"
                 )
+            else:
+                print(f"    {outcome}: No successful specifications")
 
         self.robustness_results["specification_curve"] = spec_curve_results
         return spec_curve_results
+
+    def bootstrap_inference(self, n_bootstrap: int = 1000) -> Dict[str, Any]:
+        """
+        Implement bootstrap-based inference as alternative to clustering.
+        
+        Args:
+            n_bootstrap: Number of bootstrap iterations
+            
+        Returns:
+            Dictionary with bootstrap results for each outcome
+        """
+        print("\n=== Bootstrap Inference Analysis ===")
+        
+        if self.df is None:
+            self.load_data()
+        
+        bootstrap_results = {}
+        
+        for outcome in self.outcome_vars:
+            print(f"\nBootstrap analysis for {outcome}...")
+            
+            try:
+                # Create clean dataset for this outcome
+                df_clean = self.df[
+                    [outcome, "post_treatment", "state", "year", "region", "treated"]
+                ].dropna().reset_index(drop=True)
+                
+                if len(df_clean) < 20:
+                    print(f"  Insufficient data for {outcome}: {len(df_clean)} observations")
+                    bootstrap_results[outcome] = {
+                        "coefficient": np.nan,
+                        "bootstrap_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_bootstraps": 0
+                    }
+                    continue
+                
+                # Fit base model
+                formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
+                try:
+                    base_model = smf.ols(formula, data=df_clean).fit()
+                    base_coef = base_model.params["post_treatment"]
+                except Exception as e:
+                    print(f"  Base model failed for {outcome}: {e}")
+                    bootstrap_results[outcome] = {
+                        "coefficient": np.nan,
+                        "bootstrap_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_bootstraps": 0
+                    }
+                    continue
+                
+                # Bootstrap procedure
+                bootstrap_coefs = []
+                states = df_clean["state"].unique()
+                
+                for i in range(n_bootstrap):
+                    try:
+                        # Sample states with replacement (cluster bootstrap)
+                        bootstrap_states = np.random.choice(states, size=len(states), replace=True)
+                        
+                        # Create bootstrap sample
+                        bootstrap_df = pd.concat([
+                            df_clean[df_clean["state"] == state].copy() 
+                            for state in bootstrap_states
+                        ], ignore_index=True)
+                        
+                        # Fit model on bootstrap sample
+                        bootstrap_model = smf.ols(formula, data=bootstrap_df).fit()
+                        bootstrap_coefs.append(bootstrap_model.params["post_treatment"])
+                        
+                    except Exception:
+                        # Silent failure for individual bootstrap draws
+                        continue
+                
+                if len(bootstrap_coefs) < 100:  # Need at least 100 successful draws
+                    print(f"  Too few successful bootstrap draws for {outcome}: {len(bootstrap_coefs)}")
+                    bootstrap_results[outcome] = {
+                        "coefficient": base_coef,
+                        "bootstrap_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_bootstraps": len(bootstrap_coefs)
+                    }
+                    continue
+                
+                # Calculate bootstrap statistics
+                bootstrap_coefs = np.array(bootstrap_coefs)
+                bootstrap_se = np.std(bootstrap_coefs)
+                ci_lower = np.percentile(bootstrap_coefs, 2.5)
+                ci_upper = np.percentile(bootstrap_coefs, 97.5)
+                
+                # Two-tailed p-value (assuming null hypothesis = 0)
+                p_value = 2 * min(
+                    np.mean(bootstrap_coefs <= 0),
+                    np.mean(bootstrap_coefs >= 0)
+                )
+                
+                bootstrap_results[outcome] = {
+                    "coefficient": base_coef,
+                    "bootstrap_se": bootstrap_se,
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "p_value": p_value,
+                    "successful_bootstraps": len(bootstrap_coefs)
+                }
+                
+                print(f"  Coefficient: {base_coef:.3f}")
+                print(f"  Bootstrap SE: {bootstrap_se:.3f}")
+                print(f"  95% CI: [{ci_lower:.3f}, {ci_upper:.3f}]")
+                print(f"  p-value: {p_value:.3f}")
+                print(f"  Successful bootstraps: {len(bootstrap_coefs)}/{n_bootstrap}")
+                
+            except Exception as e:
+                print(f"  Bootstrap failed for {outcome}: {e}")
+                bootstrap_results[outcome] = {
+                    "coefficient": np.nan,
+                    "bootstrap_se": np.nan,
+                    "ci_lower": np.nan,
+                    "ci_upper": np.nan,
+                    "p_value": np.nan,
+                    "successful_bootstraps": 0
+                }
+        
+        self.robustness_results["bootstrap"] = bootstrap_results
+        print("\nBootstrap inference completed.")
+        return bootstrap_results
+
+    def jackknife_inference(self) -> Dict[str, Any]:
+        """
+        Implement jackknife-based inference as alternative to clustering.
+        
+        Returns:
+            Dictionary with jackknife results for each outcome
+        """
+        print("\n=== Jackknife Inference Analysis ===")
+        
+        if self.df is None:
+            self.load_data()
+        
+        jackknife_results = {}
+        
+        for outcome in self.outcome_vars:
+            print(f"\nJackknife analysis for {outcome}...")
+            
+            try:
+                # Create clean dataset for this outcome
+                df_clean = self.df[
+                    [outcome, "post_treatment", "state", "year", "region", "treated"]
+                ].dropna().reset_index(drop=True)
+                
+                if len(df_clean) < 20:
+                    print(f"  Insufficient data for {outcome}: {len(df_clean)} observations")
+                    jackknife_results[outcome] = {
+                        "coefficient": np.nan,
+                        "jackknife_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_jackknife": 0
+                    }
+                    continue
+                
+                # Fit base model
+                formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
+                try:
+                    base_model = smf.ols(formula, data=df_clean).fit()
+                    base_coef = base_model.params["post_treatment"]
+                except Exception as e:
+                    print(f"  Base model failed for {outcome}: {e}")
+                    jackknife_results[outcome] = {
+                        "coefficient": np.nan,
+                        "jackknife_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_jackknife": 0
+                    }
+                    continue
+                
+                # Jackknife procedure (leave-one-state-out)
+                jackknife_coefs = []
+                states = df_clean["state"].unique()
+                
+                for state in states:
+                    try:
+                        # Create jackknife sample (exclude one state)
+                        jackknife_df = df_clean[df_clean["state"] != state].copy()
+                        
+                        if len(jackknife_df) < 10:  # Need minimum observations
+                            continue
+                        
+                        # Fit model on jackknife sample
+                        jackknife_model = smf.ols(formula, data=jackknife_df).fit()
+                        jackknife_coefs.append(jackknife_model.params["post_treatment"])
+                        
+                    except Exception:
+                        # Silent failure for individual jackknife samples
+                        continue
+                
+                if len(jackknife_coefs) < 5:  # Need at least 5 successful samples
+                    print(f"  Too few successful jackknife samples for {outcome}: {len(jackknife_coefs)}")
+                    jackknife_results[outcome] = {
+                        "coefficient": base_coef,
+                        "jackknife_se": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "p_value": np.nan,
+                        "successful_jackknife": len(jackknife_coefs)
+                    }
+                    continue
+                
+                # Calculate jackknife statistics
+                jackknife_coefs = np.array(jackknife_coefs)
+                n_samples = len(jackknife_coefs)
+                
+                # Jackknife standard error
+                jackknife_se = np.sqrt((n_samples - 1) * np.var(jackknife_coefs))
+                
+                # Confidence interval using t-distribution
+                from scipy.stats import t
+                t_critical = t.ppf(0.975, df=n_samples-1)
+                ci_lower = base_coef - t_critical * jackknife_se
+                ci_upper = base_coef + t_critical * jackknife_se
+                
+                # p-value using t-test
+                t_stat = base_coef / jackknife_se if jackknife_se > 0 else 0
+                p_value = 2 * (1 - t.cdf(abs(t_stat), df=n_samples-1))
+                
+                jackknife_results[outcome] = {
+                    "coefficient": base_coef,
+                    "jackknife_se": jackknife_se,
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "p_value": p_value,
+                    "successful_jackknife": len(jackknife_coefs)
+                }
+                
+                print(f"  Coefficient: {base_coef:.3f}")
+                print(f"  Jackknife SE: {jackknife_se:.3f}")
+                print(f"  95% CI: [{ci_lower:.3f}, {ci_upper:.3f}]")
+                print(f"  p-value: {p_value:.3f}")
+                print(f"  Successful jackknife samples: {len(jackknife_coefs)}/{len(states)}")
+                
+            except Exception as e:
+                print(f"  Jackknife failed for {outcome}: {e}")
+                jackknife_results[outcome] = {
+                    "coefficient": np.nan,
+                    "jackknife_se": np.nan,
+                    "ci_lower": np.nan,
+                    "ci_upper": np.nan,
+                    "p_value": np.nan,
+                    "successful_jackknife": 0
+                }
+        
+        self.robustness_results["jackknife"] = jackknife_results
+        print("\nJackknife inference completed.")
+        return jackknife_results
+
+    def wild_cluster_bootstrap(self, n_bootstrap: int = 999) -> Dict[str, Any]:
+        """
+        Implement wild cluster bootstrap for robust inference with small number of clusters.
+        
+        Args:
+            n_bootstrap: Number of bootstrap iterations (odd number recommended)
+            
+        Returns:
+            Dictionary with wild bootstrap results for each outcome
+        """
+        print("\n=== Wild Cluster Bootstrap Analysis ===")
+        
+        if self.df is None:
+            self.load_data()
+        
+        wild_bootstrap_results = {}
+        
+        for outcome in self.outcome_vars:
+            print(f"\nWild bootstrap analysis for {outcome}...")
+            
+            try:
+                # Create clean dataset for this outcome
+                df_clean = self.df[
+                    [outcome, "post_treatment", "state", "year", "region", "treated"]
+                ].dropna().reset_index(drop=True)
+                
+                if len(df_clean) < 20:
+                    print(f"  Insufficient data for {outcome}: {len(df_clean)} observations")
+                    wild_bootstrap_results[outcome] = {
+                        "coefficient": np.nan,
+                        "wild_bootstrap_p": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "successful_bootstraps": 0
+                    }
+                    continue
+                
+                # Fit base model and get residuals
+                formula = f"{outcome} ~ post_treatment + C(state) + C(year)"
+                try:
+                    base_model = smf.ols(formula, data=df_clean).fit()
+                    base_coef = base_model.params["post_treatment"]
+                    base_t_stat = base_model.tvalues["post_treatment"]
+                    residuals = base_model.resid
+                except Exception as e:
+                    print(f"  Base model failed for {outcome}: {e}")
+                    wild_bootstrap_results[outcome] = {
+                        "coefficient": np.nan,
+                        "wild_bootstrap_p": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "successful_bootstraps": 0
+                    }
+                    continue
+                
+                # Wild bootstrap procedure
+                bootstrap_t_stats = []
+                states = df_clean["state"].unique()
+                
+                for i in range(n_bootstrap):
+                    try:
+                        # Generate wild bootstrap weights (Rademacher: +1 or -1)
+                        wild_weights = np.random.choice([-1, 1], size=len(states))
+                        
+                        # Create weight mapping for each observation
+                        weight_map = dict(zip(states, wild_weights))
+                        obs_weights = df_clean["state"].map(weight_map)
+                        
+                        # Create wild bootstrap dependent variable
+                        y_star = base_model.fittedvalues + obs_weights * residuals
+                        df_bootstrap = df_clean.copy()
+                        df_bootstrap[outcome] = y_star
+                        
+                        # Fit model on bootstrap sample
+                        bootstrap_model = smf.ols(formula, data=df_bootstrap).fit()
+                        bootstrap_t_stats.append(bootstrap_model.tvalues["post_treatment"])
+                        
+                    except Exception:
+                        # Silent failure for individual bootstrap draws
+                        continue
+                
+                if len(bootstrap_t_stats) < min(50, n_bootstrap * 0.5):  # Need at least 50% successful draws
+                    print(f"  Too few successful wild bootstrap draws for {outcome}: {len(bootstrap_t_stats)}")
+                    wild_bootstrap_results[outcome] = {
+                        "coefficient": base_coef,
+                        "wild_bootstrap_p": np.nan,
+                        "ci_lower": np.nan,
+                        "ci_upper": np.nan,
+                        "successful_bootstraps": len(bootstrap_t_stats)
+                    }
+                    continue
+                
+                # Calculate wild bootstrap p-value
+                bootstrap_t_stats = np.array(bootstrap_t_stats)
+                
+                # Two-tailed p-value
+                p_value = np.mean(np.abs(bootstrap_t_stats) >= np.abs(base_t_stat))
+                
+                # Confidence interval using percentile method
+                # Transform t-statistics back to coefficients (approximate)
+                ci_lower = np.percentile(bootstrap_t_stats * base_model.bse["post_treatment"] + base_coef, 2.5)
+                ci_upper = np.percentile(bootstrap_t_stats * base_model.bse["post_treatment"] + base_coef, 97.5)
+                
+                wild_bootstrap_results[outcome] = {
+                    "coefficient": base_coef,
+                    "wild_bootstrap_p": p_value,
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "successful_bootstraps": len(bootstrap_t_stats)
+                }
+                
+                print(f"  Coefficient: {base_coef:.3f}")
+                print(f"  Wild bootstrap p-value: {p_value:.3f}")
+                print(f"  95% CI: [{ci_lower:.3f}, {ci_upper:.3f}]")
+                print(f"  Successful bootstraps: {len(bootstrap_t_stats)}/{n_bootstrap}")
+                
+            except Exception as e:
+                print(f"  Wild bootstrap failed for {outcome}: {e}")
+                wild_bootstrap_results[outcome] = {
+                    "coefficient": np.nan,
+                    "wild_bootstrap_p": np.nan,
+                    "ci_lower": np.nan,
+                    "ci_upper": np.nan,
+                    "successful_bootstraps": 0
+                }
+        
+        self.robustness_results["wild_bootstrap"] = wild_bootstrap_results
+        print("\nWild cluster bootstrap completed.")
+        return wild_bootstrap_results
 
     def create_robustness_plots(self) -> dict[str, plt.Figure]:
         """Create visualization plots for robustness results."""
@@ -740,33 +1257,40 @@ Spec. Curve shows coefficient range across specifications.
 
     def run_full_robustness_suite(self) -> str:
         """
-        Run complete robustness analysis pipeline.
+        Run complete robustness analysis pipeline with enhanced methods.
 
         Returns:
             Path to robustness report
         """
-        print("Phase 4.3: Running Robustness Analysis")
+        print("Phase 4.3: Running Enhanced Robustness Analysis")
         print("=" * 50)
 
         # Load data
         if self.df is None:
             self.load_data()
 
-        # Run all robustness tests
+        # Run traditional robustness tests
+        print("Running traditional robustness tests...")
         self.leave_one_state_out()
         self.alternative_clustering()
         self.permutation_test(n_permutations=500)  # Reduced for speed
         self.specification_curve()
 
+        # Run alternative robust methods (Phase 2)
+        print("\nRunning alternative robust methods...")
+        self.bootstrap_inference(n_bootstrap=1000)
+        self.jackknife_inference()
+        self.wild_cluster_bootstrap(n_bootstrap=999)
+
         # Create outputs
         self.create_robustness_table()
         self.create_robustness_plots()
 
-        # Generate report
+        # Generate enhanced report
         report_path = self.reports_dir / "robustness_analysis_report.md"
 
         with open(report_path, "w") as f:
-            f.write(f"""# Phase 4.3: Robustness Analysis Report
+            f.write(f"""# Phase 4.3: Enhanced Robustness Analysis Report
 
 Generated by: Jeff Chen (jeffreyc1@alumni.cmu.edu)
 Created in collaboration with Claude Code
@@ -774,14 +1298,24 @@ Date: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}
 
 ## Robustness Tests Completed
 
+### Traditional Methods
 1. **Leave-One-State-Out Analysis**: Tests sensitivity to individual states
 2. **Alternative Clustering**: Compares standard errors across clustering methods
 3. **Permutation Test**: Tests significance under random treatment assignment
 4. **Specification Curve**: Tests sensitivity to model specification choices
 
+### Alternative Robust Methods (Phase 2)
+5. **Bootstrap Inference**: Cluster bootstrap for robust standard errors
+6. **Jackknife Inference**: Leave-one-state-out inference method
+7. **Wild Cluster Bootstrap**: Robust inference for small cluster counts
+
 ## Key Findings
 
 {self._summarize_robustness_results()}
+
+## Alternative Method Results
+
+{self._summarize_alternative_methods()}
 
 ## Files Generated
 
@@ -799,7 +1333,7 @@ Date: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}
 {self._robustness_conclusion()}
 """)
 
-        print("\n✅ Robustness analysis completed successfully!")
+        print("\n✅ Enhanced robustness analysis completed successfully!")
         print(f"📊 Report available at: {report_path}")
 
         return str(report_path)
@@ -836,6 +1370,62 @@ Date: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}
             )
 
         return "\n".join(summary) if summary else "No robustness tests completed."
+
+    def _summarize_alternative_methods(self) -> str:
+        """Generate summary of alternative robust method results."""
+        summary_lines = []
+        
+        # Bootstrap results
+        if "bootstrap" in self.robustness_results:
+            bootstrap_results = self.robustness_results["bootstrap"]
+            successful_outcomes = sum(
+                1 for outcome, results in bootstrap_results.items() 
+                if results.get("successful_bootstraps", 0) > 100
+            )
+            summary_lines.append(f"- **Bootstrap Inference**: {successful_outcomes}/{len(bootstrap_results)} outcomes with robust results")
+            
+            for outcome, results in bootstrap_results.items():
+                if results.get("successful_bootstraps", 0) > 100:
+                    coef = results.get("coefficient", np.nan)
+                    se = results.get("bootstrap_se", np.nan)
+                    p_val = results.get("p_value", np.nan)
+                    summary_lines.append(f"  - {outcome}: β={coef:.3f}, SE={se:.3f}, p={p_val:.3f}")
+        
+        # Jackknife results
+        if "jackknife" in self.robustness_results:
+            jackknife_results = self.robustness_results["jackknife"]
+            successful_outcomes = sum(
+                1 for outcome, results in jackknife_results.items() 
+                if results.get("successful_jackknife", 0) > 5
+            )
+            summary_lines.append(f"- **Jackknife Inference**: {successful_outcomes}/{len(jackknife_results)} outcomes with robust results")
+            
+            for outcome, results in jackknife_results.items():
+                if results.get("successful_jackknife", 0) > 5:
+                    coef = results.get("coefficient", np.nan)
+                    se = results.get("jackknife_se", np.nan)
+                    p_val = results.get("p_value", np.nan)
+                    summary_lines.append(f"  - {outcome}: β={coef:.3f}, SE={se:.3f}, p={p_val:.3f}")
+        
+        # Wild bootstrap results
+        if "wild_bootstrap" in self.robustness_results:
+            wild_results = self.robustness_results["wild_bootstrap"]
+            successful_outcomes = sum(
+                1 for outcome, results in wild_results.items() 
+                if results.get("successful_bootstraps", 0) > 100
+            )
+            summary_lines.append(f"- **Wild Cluster Bootstrap**: {successful_outcomes}/{len(wild_results)} outcomes with robust results")
+            
+            for outcome, results in wild_results.items():
+                if results.get("successful_bootstraps", 0) > 100:
+                    coef = results.get("coefficient", np.nan)
+                    p_val = results.get("wild_bootstrap_p", np.nan)
+                    summary_lines.append(f"  - {outcome}: β={coef:.3f}, wild p={p_val:.3f}")
+        
+        if not summary_lines:
+            return "No alternative method results available."
+        
+        return "\n".join(summary_lines)
 
     def _robustness_conclusion(self) -> str:
         """Provide overall robustness conclusion."""
