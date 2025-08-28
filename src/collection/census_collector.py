@@ -115,7 +115,8 @@ class CensusEducationFinance(APIBasedCollector):
             params = {"get": ",".join(variables), "for": "state:*", "key": self.api_key}
 
             try:
-                response = requests.get(endpoint, params=params, timeout=30)
+                # Use unified API client for rate limiting and consistent error handling
+                response = self.api_client.get(endpoint, params=params, timeout=30)
                 response.raise_for_status()
 
                 data = response.json()
@@ -309,24 +310,7 @@ class CensusEducationFinance(APIBasedCollector):
             self.logger.warning(f"Failed to parse finance record: {str(e)}")
             return None
 
-    def _safe_int(self, value) -> int | None:
-        """
-        Safely convert API values to int, handling Census special codes
-
-        Args:
-            value: Raw value from API
-
-        Returns:
-            Integer value or None if invalid/missing
-        """
-
-        if value in [None, "", "null", "N", "X", "S", "D"]:
-            return None
-
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
+    # Deprecated: use SafeTypeConverter.safe_int instead of a local helper.
 
     def _convert_state_name_to_code(self, state_name: str) -> str | None:
         """
