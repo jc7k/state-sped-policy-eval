@@ -11,6 +11,7 @@ import pytest
 import requests
 
 from src.collection.census_collector import CensusEducationFinance
+from src.collection.common import APIClient
 
 
 class TestCensusEducationFinanceInit:
@@ -67,7 +68,7 @@ class TestCensusEducationFinanceInit:
 class TestFetchStateFinance:
     """Test main data collection method"""
 
-    @patch("requests.get")
+    @patch("src.collection.common.APIClient.get")
     @patch("time.sleep")
     def test_successful_single_year(self, mock_sleep, mock_get, census_sample_response):
         """Test successful data collection for single year"""
@@ -84,9 +85,11 @@ class TestFetchStateFinance:
         mock_get.assert_called_once()
         call_args = mock_get.call_args
 
-        # Check endpoint construction
-        assert "2022" in call_args[0][0]
-        assert "programs/finances/elementary-secondary-education" in call_args[0][0]
+        # Check endpoint construction (handle bound method: first arg is APIClient instance)
+        args, kwargs = call_args
+        url_arg = args[1] if isinstance(args[0], APIClient) else args[0]
+        assert "2022" in url_arg
+        assert "programs/finances/elementary-secondary-education" in url_arg
 
         # Check parameters
         params = call_args[1]["params"]
@@ -97,7 +100,7 @@ class TestFetchStateFinance:
         # Verify result structure
         assert isinstance(result, pd.DataFrame)
 
-    @patch("requests.get")
+    @patch("src.collection.common.APIClient.get")
     @patch("time.sleep")
     def test_multiple_years(self, mock_sleep, mock_get, census_sample_response):
         """Test data collection across multiple years"""
@@ -117,7 +120,7 @@ class TestFetchStateFinance:
         # Should sleep 2 times (between requests, not after last)
         assert mock_sleep.call_count == 2
 
-    @patch("requests.get")
+    @patch("src.collection.common.APIClient.get")
     def test_request_exception_handling(self, mock_get):
         """Test handling of network request exceptions"""
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
@@ -129,7 +132,7 @@ class TestFetchStateFinance:
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 0
 
-    @patch("requests.get")
+    @patch("src.collection.common.APIClient.get")
     def test_different_endpoint_for_older_years(self, mock_get):
         """Test that older years use different API endpoint"""
         mock_response = Mock()
@@ -141,7 +144,8 @@ class TestFetchStateFinance:
         collector.fetch_state_finance([2012])  # Pre-2013 year
 
         call_args = mock_get.call_args
-        endpoint = call_args[0][0]
+        args, _kwargs = call_args
+        endpoint = args[1] if isinstance(args[0], APIClient) else args[0]
 
         # Should use old endpoint format
         assert "governments/school-districts/finance" in endpoint
