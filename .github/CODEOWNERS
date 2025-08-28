@@ -1,0 +1,9 @@
+# Default owners for all files
+* @jc7k
+
+# Analysis modules
+src/analysis/* @jc7k
+
+# Data collection
+src/collection/* @jc7k
+

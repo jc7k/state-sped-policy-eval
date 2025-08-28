@@ -1,0 +1,38 @@
+name: Bug Report
+description: Report a bug to help us improve
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! Please fill out the details below.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps, commands, and data references to reproduce the issue.
+      placeholder: |
+        1. `uv run python src/analysis/02_causal_models.py`
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Environment
+      description: Python version, OS, and any notable env details
+      placeholder: e.g., Python 3.13, Ubuntu 22.04
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Traceback
+      description: Paste relevant error logs or stack traces
+      render: shell
+
