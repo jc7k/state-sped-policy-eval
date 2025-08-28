@@ -21,6 +21,6 @@ repos:
         name: Run fast unit tests
         entry: uv run pytest
         language: system
-        args: [tests/unit/, -x, --tb=short, -q, -m, "not slow"]
+        args: [src, -x, --tb=short, -q, -m, "not slow"]
         pass_filenames: false
         always_run: true

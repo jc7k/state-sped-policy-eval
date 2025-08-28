@@ -47,6 +47,7 @@ unfixable = []
 [lint.per-file-ignores]
 # Tests can use magic values, assertions, and unused imports
 "tests/*" = ["E501", "S101", "F401", "F811"]
+"src/**/tests/*" = ["E501", "F401", "F811"]
 
 [lint.mccabe]
 max-complexity = 10
