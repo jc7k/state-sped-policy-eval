@@ -109,12 +109,10 @@ class CausalAnalyzer:
 
         for col in self.df.columns:
             col_lower = col.lower()
-            # Look for achievement gaps (primary outcome)
+            # Select gap variables (with subject), score (non-gap), or inclusion/placement measures
             if (
-                "gap" in col_lower
-                and any(subj in col_lower for subj in ["math", "reading"])
-                or "score" in col_lower
-                and "gap" not in col_lower
+                ("gap" in col_lower and any(subj in col_lower for subj in ["math", "reading"]))
+                or ("score" in col_lower and "gap" not in col_lower)
                 or any(term in col_lower for term in ["inclusion", "placement"])
             ):
                 potential_outcomes.append(col)

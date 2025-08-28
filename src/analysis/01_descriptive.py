@@ -166,33 +166,35 @@ class DescriptiveAnalyzer:
         # Flatten column names
         summary_stats.columns = [f"{col[0]}_{col[1]}" for col in summary_stats.columns]
 
-        # Add difference between treated and control
-        treated_means = summary_stats.loc[
-            1, [col for col in summary_stats.columns if col.endswith("_mean")]
-        ]
-        control_means = summary_stats.loc[
-            0, [col for col in summary_stats.columns if col.endswith("_mean")]
-        ]
+        # Add difference between treated and control (if both groups exist)
+        mean_cols = [col for col in summary_stats.columns if col.endswith("_mean")]
+        if 1 in summary_stats.index and 0 in summary_stats.index:
+            treated_means = summary_stats.loc[1, mean_cols]
+            control_means = summary_stats.loc[0, mean_cols]
 
-        # Create difference row
-        differences = {}
-        for var in key_vars:
-            if f"{var}_mean" in treated_means.index and f"{var}_mean" in control_means.index:
-                diff = treated_means[f"{var}_mean"] - control_means[f"{var}_mean"]
-                differences[f"{var}_mean"] = diff
-                differences[f"{var}_std"] = np.nan  # No std for differences
-                differences[f"{var}_count"] = np.nan  # No count for differences
+            differences = {}
+            for var in key_vars:
+                mean_key = f"{var}_mean"
+                if mean_key in treated_means.index and mean_key in control_means.index:
+                    diff = treated_means[mean_key] - control_means[mean_key]
+                    differences[mean_key] = diff
+                    differences[f"{var}_std"] = np.nan  # No std for differences
+                    differences[f"{var}_count"] = np.nan  # No count for differences
 
-        # Add difference as new row
-        diff_series = pd.Series(differences, name="difference")
-        summary_stats = pd.concat([summary_stats, diff_series.to_frame().T])
+            # Append difference row
+            if differences:
+                diff_series = pd.Series(differences, name="difference")
+                summary_stats = pd.concat([summary_stats, diff_series.to_frame().T])
 
         # Save to CSV and LaTeX
         summary_stats.to_csv(self.tables_dir / "table1_summary_stats.csv")
 
         # Create LaTeX table
+        # Escape underscores in column headers for LaTeX only (keep CSV headers unchanged)
         latex_table = self._format_latex_table(
-            summary_stats, title="Summary Statistics by Reform Status", label="tab:summary_stats"
+            summary_stats.rename(columns=lambda c: str(c).replace("_", "\\_")),
+            title="Summary Statistics by Reform Status",
+            label="tab:summary_stats",
         )
 
         with open(self.tables_dir / "table1_summary_stats.tex", "w") as f:

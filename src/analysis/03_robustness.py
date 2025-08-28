@@ -212,6 +212,8 @@ class RobustnessAnalyzer:
         """
         Leave-one-state-out robustness analysis with improved error handling.
 
+        Expects columns: `state`, `year`, `post_treatment`, and the outcome variable.
+
         Returns:
             Dictionary of LOSO results
         """
@@ -299,6 +301,8 @@ class RobustnessAnalyzer:
     def alternative_clustering(self) -> dict[str, Any]:
         """
         Test robustness to alternative clustering strategies with improved error handling.
+
+        Expects columns: `state`, `year`, `post_treatment`, and the outcome variable.
 
         Returns:
             Dictionary of clustering results
@@ -607,6 +611,8 @@ class RobustnessAnalyzer:
         """
         Implement bootstrap-based inference as alternative to clustering.
 
+        Expects columns: `state`, `year`, `post_treatment`, and the outcome variable.
+
         Args:
             n_bootstrap: Number of bootstrap iterations
 
@@ -626,7 +632,7 @@ class RobustnessAnalyzer:
             try:
                 # Create clean dataset for this outcome
                 df_clean = (
-                    self.df[[outcome, "post_treatment", "state", "year", "region", "treated"]]
+                    self.df[[outcome, "post_treatment", "state", "year"]]
                     .dropna()
                     .reset_index(drop=True)
                 )
@@ -743,6 +749,8 @@ class RobustnessAnalyzer:
         """
         Implement jackknife-based inference as alternative to clustering.
 
+        Expects columns: `state`, `year`, `post_treatment`, and the outcome variable.
+
         Returns:
             Dictionary with jackknife results for each outcome
         """
@@ -759,7 +767,7 @@ class RobustnessAnalyzer:
             try:
                 # Create clean dataset for this outcome
                 df_clean = (
-                    self.df[[outcome, "post_treatment", "state", "year", "region", "treated"]]
+                    self.df[[outcome, "post_treatment", "state", "year"]]
                     .dropna()
                     .reset_index(drop=True)
                 )
@@ -879,6 +887,8 @@ class RobustnessAnalyzer:
         """
         Implement wild cluster bootstrap for robust inference with small number of clusters.
 
+        Expects columns: `state`, `year`, `post_treatment`, and the outcome variable.
+
         Args:
             n_bootstrap: Number of bootstrap iterations (odd number recommended)
 
@@ -898,7 +908,7 @@ class RobustnessAnalyzer:
             try:
                 # Create clean dataset for this outcome
                 df_clean = (
-                    self.df[[outcome, "post_treatment", "state", "year", "region", "treated"]]
+                    self.df[[outcome, "post_treatment", "state", "year"]]
                     .dropna()
                     .reset_index(drop=True)
                 )
